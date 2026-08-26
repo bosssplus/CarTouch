@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CarTouch - کنترل خودرو</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- هدر -->
+        <header>
+            <h1>🚗 CarTouch</h1>
+            <span id="connection-status">قطع</span>
+        </header>
+        
+        <!-- تب‌ها -->
+        <div id="tabs">
+            <button class="tab-btn active" data-tab="control">🎮 کنترل</button>
+            <button class="tab-btn" data-tab="dashboard">📊 داشبورد</button>
+            <button class="tab-btn" data-tab="settings">⚙ تنظیمات</button>
+        </div>
+        
+        <!-- تب کنترل -->
+        <div id="tab-control" class="tab-content active">
+            <div class="control-grid">
+                <button class="ctrl-btn lock" data-cmd="lock">🔒 قفل</button>
+                <button class="ctrl-btn unlock" data-cmd="unlock">🔓 باز</button>
+                <button class="ctrl-btn" data-cmd="windows_up">⬆ شیشه بالا</button>
+                <button class="ctrl-btn" data-cmd="windows_down">⬇ شیشه پایین</button>
+                <button class="ctrl-btn" data-cmd="sunroof">☀ سانروف</button>
+                <button class="ctrl-btn" data-cmd="trunk">🔙 صندوق</button>
+                <button class="ctrl-btn" data-cmd="mirror">🪞 آینه</button>
+                <button class="ctrl-btn" data-cmd="alarm">🚨 دزدگیر</button>
+            </div>
+        </div>
+        
+        <!-- تب داشبورد -->
+        <div id="tab-dashboard" class="tab-content">
+            <div id="speed-display">0 <small>km/h</small></div>
+            <div class="dash-grid">
+                <div class="dash-item">
+                    <span class="dash-label">RPM</span>
+                    <span class="dash-value" id="dash-rpm">0</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">🌡 دما</span>
+                    <span class="dash-value" id="dash-temp">-- °C</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">🔋 ولتاژ</span>
+                    <span class="dash-value" id="dash-battery">-- V</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">⛽ سوخت</span>
+                    <span class="dash-value" id="dash-fuel">--%</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- تب تنظیمات -->
+        <div id="tab-settings" class="tab-content">
+            <div class="settings-group">
+                <h3>WiFi</h3>
+                <p id="wifi-info">حالت: Access Point</p>
+                <p id="wifi-ip">IP: 192.168.4.1</p>
+            </div>
+            <div class="settings-group">
+                <h3>CAN Bus</h3>
+                <p id="can-info">وضعیت: ---</p>
+            </div>
+            <div class="settings-group">
+                <h3>درباره</h3>
+                <p>CarTouch v1.0</p>
+                <p>ESP32-S3 + CAN Bus</p>
+            </div>
+        </div>
+        
+        <!-- نوتیفیکیشن -->
+        <div id="notification"></div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
