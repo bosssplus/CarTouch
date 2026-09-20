@@ -240,8 +240,35 @@ void WebServerManager::begin(uint16_t port) {
         _handleAPIStatus(request);
     });
     
-    // سرو فایل‌های static از SPIFFS
-    _server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.html");
+    // === اصلاحیه‌ی امنیتی ===
+    // قبلاً اینجا این خط بود:
+    //   _server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.html");
+    // این خط هر فایلی که در ریشه‌ی SPIFFS باشد را بدون عبور از
+    // _authenticate() سرو می‌کرد. یعنی یک درخواست مستقیم به
+    // GET /index.html (نه GET /) کاملاً گیت پسورد روت "/" را دور
+    // می‌زد و صفحه را بدون Basic Auth برمی‌گرداند. بدتر از آن،
+    // هر فایل دیگری که در آینده به‌صورت اشتباه در ریشه‌ی SPIFFS قرار
+    // بگیرد (مثلاً یک بکاپ تنظیمات یا لاگ) هم به همین شکل بدون
+    // احراز هویت در دسترس هر کسی در شبکه‌ی Wi-Fi دستگاه قرار می‌گرفت.
+    //
+    // فقط دارایی‌های ایستا (JS/CSS) که خودشان حساس نیستند و صفحه‌ی
+    // لاگین/برنامه به آن‌ها نیاز دارد را صریحاً و بدون serveStatic
+    // عمومی سرو می‌کنیم. index.html همچنان فقط از طریق روت
+    // احرازهویت‌شده‌ی "/" در بالا سرو می‌شود.
+    _server.on("/app.js", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (SPIFFS.exists("/app.js")) {
+            request->send(SPIFFS, "/app.js", "application/javascript");
+        } else {
+            request->send(404, "text/plain", "404 - Not Found");
+        }
+    });
+    _server.on("/style.css", HTTP_GET, [](AsyncWebServerRequest* request) {
+        if (SPIFFS.exists("/style.css")) {
+            request->send(SPIFFS, "/style.css", "text/css");
+        } else {
+            request->send(404, "text/plain", "404 - Not Found");
+        }
+    });
     
     // 404
     _server.onNotFound([this](AsyncWebServerRequest* request) {
@@ -252,12 +279,18 @@ void WebServerManager::begin(uint16_t port) {
     _server.begin();
     _started = true;
     
-    Serial.printf("[WEB] وب سرور روشن شد: http://%s:%d (ورود: %s/%s)\n",
+    // اصلاحیه: قبلاً اینجا نام‌کاربری و پسورد واقعی (webUser/webPass)
+    // هر بار بوت به‌صورت متن خام روی Serial چاپ می‌شد. حتی اگر Serial
+    // معمولاً فقط لوکال دیده می‌شود، بهتر است اعتبارنامه‌ی واقعی جایی
+    // لاگ نشود (مثلاً اگر یک روز Serial به یک لاگر remote وصل شود).
+    // فقط نام‌کاربری چاپ می‌شود، نه پسورد.
+    Serial.printf("[WEB] وب سرور روشن شد: http://%s:%d (کاربر: %s)\n",
                   WiFi.softAPIP().toString().c_str(), 
                   port,
-                  getConfig()->webUser,
-                  getConfig()->webPass);
-    Serial.println("[WEB] ⚠️ لطفاً رمز پیش‌فرض وب را از منوی تنظیمات تغییر دهید");
+                  getConfig()->webUser);
+    if (isUsingDefaultPassword()) {
+        Serial.println("[WEB] ⚠️ لطفاً رمز پیش‌فرض وب را از منوی تنظیمات تغییر دهید");
+    }
 }
 
 // ======================== به‌روزرسانی ========================

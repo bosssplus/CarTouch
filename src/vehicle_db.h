@@ -22,8 +22,31 @@
 #include "config.h"
 
 // حداکثر تعداد سیگنال‌ها و پیام‌ها
+//
+// === اصلاحیه‌ی بحرانی RAM ===
+// قبلاً MAX_DBC_SIGNALS=200 بود. چون هر DbcMessage آرایه‌ی
+// DbcSignal signals[MAX_DBC_SIGNALS] را به صورت inline (نه پوینتر)
+// نگه می‌دارد، این مقدار باعث می‌شد هر DbcMessage حدود ۲۵.۶ کیلوبایت
+// باشد و آرایه‌ی _messages[MAX_DBC_MESSAGES] در VehicleDB در مجموع
+// ۱٫۲۲ مگابایت RAM استاتیک بخواهد (با g++ اندازه‌گیری و تایید شد).
+// ESP32-S3 چیزی حدود ۵۱۲ کیلوبایت SRAM داخلی دارد و آبجکت全局
+// `VehicleDB vehicleDB;` در main.cpp بدون هیچ EXT_RAM/PSRAM attribute
+// تعریف شده - یعنی این آرایه در DRAM داخلی جا داده می‌شود و به احتمال
+// زیاد باعث خطای لینک ("region `dram0_0_seg' overflowed") یا کرش در
+// بوت می‌شود.
+//
+// اکثر پیام‌های DBC واقعی (حتی پیام‌های تشخیصی پیچیده) به‌ندرت بیش از
+// ۲۰-۲۴ سیگنال دارند، پس این مقدار به ۲۴ کاهش یافت. با این تغییر
+// حجم آرایه‌ی _messages از ۱٫۲۲ مگابایت به حدود ۱۵۰ کیلوبایت می‌رسد.
+//
+// توصیه‌ی تکمیلی (نیاز به تغییر در main.cpp دارد، اینجا اعمال نشده):
+// چون board_build.psram در platformio.ini فعال است، بهتر است آبجکت
+// vehicleDB (یا حداقل این آرایه) با EXT_RAM_BSS_ATTR در PSRAM قرار
+// بگیرد تا فشار روی DRAM داخلی که WiFi/BLE/LVGL هم به آن نیاز دارند
+// کم شود:
+//   EXT_RAM_BSS_ATTR VehicleDB vehicleDB;
 #define MAX_DBC_MESSAGES    50
-#define MAX_DBC_SIGNALS     200
+#define MAX_DBC_SIGNALS     24
 
 // نوع داده سیگنال DBC
 enum SignalType : uint8_t {

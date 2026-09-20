@@ -19,7 +19,13 @@
 #define PIN_CAN_TX          9       // GPIO9 - CAN Transmit
 #define PIN_CAN_RX          6       // GPIO6 - CAN Receive (تغییر از GPIO10 به دلیل تداخل با TFT_CS)
 
-// TFT Display - ILI9341
+// TFT Display - ST7796
+// اصلاحیه: این کامنت قبلاً به اشتباه "ILI9341" بود، در حالی که درایور
+// واقعی TFT_eSPI که در platformio.ini تنظیم شده ST7796_DRIVER است
+// (-DST7796_DRIVER=1). این دو درایور LCD controller متفاوتی هستند؛
+// اگر پنل واقعی شما ILI9341 باشد، صفحه یا کار نمی‌کند یا رنگ/مقیاس
+// اشتباه نشان می‌دهد. پین‌های زیر با platformio.ini هماهنگ‌اند و درست
+// هستند، فقط اسم درایور در کامنت غلط بود.
 #define PIN_TFT_CS          10      // GPIO10 - Chip Select
 #define PIN_TFT_DC          7       // GPIO7  - Data/Command
 #define PIN_TFT_RST         4       // GPIO4  - Reset

@@ -27,37 +27,50 @@ void VehicleDB::begin() {
     // تنظیم خودروهای پیش‌فرض (برای نمایش در منو)
     // در پروژه واقعی، این لیست از فایل‌های موجود در SPIFFS ساخته می‌شود
     
+    // === اصلاحیه ===
+    // لیست قبلی به فایل‌هایی مثل /dbc/toyota_camry.dbc, /dbc/honda_civic.dbc,
+    // /dbc/bmw_3series.dbc, /dbc/generic_obd2.dbc اشاره می‌کرد که هیچ‌کدام
+    // در پوشه‌ی واقعی data/dbc این پروژه وجود ندارند (چک شد) - یعنی
+    // setActiveVehicle/loadDBCFile برای همه‌ی این ۵ مورد بی‌صدا شکست
+    // می‌خورد. اینجا به فایل‌هایی که واقعاً در data/dbc موجودند اشاره
+    // می‌کنیم. "Generic / OBD-II" اصلاً به فایل DBC نیاز ندارد چون
+    // OBD2Reader مستقیماً با PIDهای استاندارد کار می‌کند، نه با DBC -
+    // پس dbcFileName آن را خالی می‌گذاریم (loadDBCFile زیر این حالت را
+    // به‌صورت امن نادیده می‌گیرد).
+    //
+    // ⚠️ قبل از افزودن هر مدل دیگر، حتماً با ls روی data/dbc چک کنید
+    // که نام فایل دقیقاً همان چیزی باشد که آنجا هست - این دقیقاً همان
+    // باگی بود که اینجا رفع شد.
     strcpy(_vehicleList[0].brand, "Generic");
     strcpy(_vehicleList[0].model, "OBD-II");
-    strcpy(_vehicleList[0].dbcFileName, "/dbc/generic_obd2.dbc");
+    strcpy(_vehicleList[0].dbcFileName, "");  // نیازی به DBC ندارد
     _vehicleList[0].yearStart = 2008;
     _vehicleList[0].yearEnd = 2025;
     
     strcpy(_vehicleList[1].brand, "Toyota");
-    strcpy(_vehicleList[1].model, "Camry");
-    strcpy(_vehicleList[1].dbcFileName, "/dbc/toyota_camry.dbc");
-    _vehicleList[1].yearStart = 2018;
-    _vehicleList[1].yearEnd = 2024;
+    strcpy(_vehicleList[1].model, "Prius (2010 PT)");
+    strcpy(_vehicleList[1].dbcFileName, "/dbc/toyota_prius_2010_pt.dbc");
+    _vehicleList[1].yearStart = 2010;
+    _vehicleList[1].yearEnd = 2015;
     
     strcpy(_vehicleList[2].brand, "Toyota");
-    strcpy(_vehicleList[2].model, "Corolla");
-    strcpy(_vehicleList[2].dbcFileName, "/dbc/toyota_corolla.dbc");
-    _vehicleList[2].yearStart = 2018;
-    _vehicleList[2].yearEnd = 2024;
+    strcpy(_vehicleList[2].model, "Ref PT (2017)");
+    strcpy(_vehicleList[2].dbcFileName, "/dbc/toyota_2017_ref_pt.dbc");
+    _vehicleList[2].yearStart = 2017;
+    _vehicleList[2].yearEnd = 2021;
     
-    strcpy(_vehicleList[3].brand, "Honda");
-    strcpy(_vehicleList[3].model, "Civic");
-    strcpy(_vehicleList[3].dbcFileName, "/dbc/honda_civic.dbc");
-    _vehicleList[3].yearStart = 2016;
-    _vehicleList[3].yearEnd = 2024;
+    strcpy(_vehicleList[3].brand, "BMW");
+    strcpy(_vehicleList[3].model, "E9x/E8x 3 Series");
+    strcpy(_vehicleList[3].dbcFileName, "/dbc/bmw_e9x_e8x.dbc");
+    _vehicleList[3].yearStart = 2005;
+    _vehicleList[3].yearEnd = 2013;
     
-    strcpy(_vehicleList[4].brand, "BMW");
-    strcpy(_vehicleList[4].model, "3 Series");
-    strcpy(_vehicleList[4].dbcFileName, "/dbc/bmw_3series.dbc");
-    _vehicleList[4].yearStart = 2017;
-    _vehicleList[4].yearEnd = 2023;
+    // توجه: هیچ فایل DBC مربوط به هوندا در data/dbc این پروژه وجود
+    // نداشت، پس مدل هوندا از لیست حذف شد. برای افزودنش، فایل DBC
+    // واقعی هوندا (مثلاً از OpenDBC) را در data/dbc قرار دهید و اینجا
+    // یک ورودی جدید با نام دقیق فایل اضافه کنید.
     
-    _vehicleCount = 5;
+    _vehicleCount = 4;
     _initialized = true;
     
     // بارگذاری خودروی پیش‌فرض از تنظیمات
@@ -70,6 +83,16 @@ void VehicleDB::begin() {
 // ======================== بارگذاری فایل DBC ========================
 
 bool VehicleDB::loadDBCFile(const char* filename) {
+    // اصلاحیه: پروفایل‌هایی مثل "Generic / OBD-II" عمداً dbcFileName
+    // خالی دارند چون به DBC نیاز ندارند (OBD2Reader با PID استاندارد
+    // کار می‌کند). قبلاً این حالت هم یک خطای "فایل یافت نشد" چاپ
+    // می‌کرد که گمراه‌کننده بود.
+    if (!filename || filename[0] == '\0') {
+        _messageCount = 0;
+        Serial.println("[DB] این خودرو به فایل DBC نیاز ندارد (حالت OBD-II عمومی)");
+        return true;
+    }
+    
     if (!SPIFFS.exists(filename)) {
         Serial.printf("⚠️ [DB] فایل DBC یافت نشد: %s\n", filename);
         return false;
@@ -122,6 +145,21 @@ bool VehicleDB::loadDBCFile(const char* filename) {
         }
     }
     
+    // اصلاحیه: اگر فایل به سقف MAX_DBC_MESSAGES رسید ولی هنوز محتوای
+    // بیشتری داشت، قبلاً بدون هیچ هشداری بقیه‌ی پیام‌ها را دور می‌ریخت.
+    // این برای یک اپ کنترل خودرو خطرناک است: ممکن است دقیقاً پیامی که
+    // به آن نیاز دارید (مثلاً وضعیت قفل درب) در نیمه‌ی دوم فایل باشد و
+    // بی‌صدا از قلم بیفتد. مثال واقعی: toyota_2017_ref_pt.dbc که در
+    // data/dbc این پروژه هست، ۱۴۳ پیام دارد - با MAX_DBC_MESSAGES=50
+    // فقط ۵۰ تای اول لود می‌شوند. اگر با این فایل کار می‌کنید، یا
+    // MAX_DBC_MESSAGES را در vehicle_db.h زیاد کنید (با افزایش مصرف
+    // RAM طبق کامنت آنجا) یا فایل DBC را قبل از قرار دادن در data/dbc
+    // به همان چند پیامی که واقعاً لازم دارید (قفل، شیشه، آینه) کم کنید.
+    if (_messageCount >= MAX_DBC_MESSAGES && file.available()) {
+        Serial.printf("⚠️ [DB] فایل DBC بیش از حد مجاز (%d) پیام دارد - بقیه نادیده گرفته شدند!\n", 
+                      MAX_DBC_MESSAGES);
+    }
+    
     file.close();
     Serial.printf("[DB] بارگذاری کامل شد - %d پیام\n", _messageCount);
     
@@ -135,16 +173,46 @@ bool VehicleDB::_parseMessageLine(const char* line) {
     
     DbcMessage* msg = &_messages[_messageCount];
     
-    // فرمت: BO_ CAN_ID MESSAGE_NAME: DLC TRANSMITTER
-    // مثال: BO_ 416 DoorStatus: 8 BodyControl
-    int canId; 
+    // فرمت واقعی DBC: BO_ CAN_ID MESSAGE_NAME: DLC TRANSMITTER
+    // مثال واقعی (از فایل‌های data/dbc این پروژه): 
+    //   "BO_ 34 Active_Fault_Latched_2: 8 MRR"
+    // توجه کنید که هیچ فاصله‌ای بین نام پیام و ':' نیست.
+    //
+    // === اصلاحیه‌ی بحرانی ===
+    // فرمت قبلی "BO_ %d %31s : %d %23s" بود که یک فاصله‌ی literal
+    // قبل از ':' در خودش داشت. چون ':' برای %s جزو whitespace نیست،
+    // %s کل توکن "Active_Fault_Latched_2:" را همراه با ':' می‌بلعید؛
+    // سپس scanf سعی می‌کرد ':' literal را با کاراکتر بعدی (که چون
+    // ':' قبلاً مصرف شده بود، الان یک رقم بود) match کند و شکست
+    // می‌خورد. نتیجه: sscanf فقط ۲ آیتم (canId, name) برمی‌گرداند،
+    // شرط parsed>=3 هیچ‌وقت true نمی‌شد و MESSAGE_COUNT همیشه صفر
+    // می‌ماند - یعنی هیچ پیامی از هیچ‌کدام از ۵۸ فایل DBC واقعی این
+    // پروژه پارس نمی‌شد (با grep روی همه‌ی فایل‌ها تایید شد).
+    //
+    // فرمت درست: ':' باید بلافاصله بعد از %s بیاید، بدون فاصله در
+    // فرمت‌رشته. برای اینکه اگر یک فایل غیراستاندارد با فاصله هم
+    // وجود داشت باز کار کند، ابتدا نام را با %[^:] (هر چیزی تا قبل
+    // از ':') می‌خوانیم که هم حالت بافاصله و هم بی‌فاصله را پوشش
+    // می‌دهد و خودِ فضای خالی انتهایی احتمالی را جدا trim می‌کنیم.
+    // اصلاحیه: چند فایل DBC واقعی (مثلاً GM, Ford) از CAN ID گسترده
+    // (extended, ۲۹ بیتی) با مقادیر بالای INT_MAX استفاده می‌کنند
+    // (مثلاً 3221225472 برای VECTOR__INDEPENDENT_SIG_MSG). قبلاً این
+    // متغیر از نوع int با %d بود که برای این مقادیر overflow امضادار
+    // می‌داد (مثلاً به -1073741824 تبدیل می‌شد). چون canId واقعی
+    // uint32_t است، اینجا هم باید همینطور خوانده شود.
+    uint32_t canId; 
     char name[32] = {0};
     char transmitter[24] = {0};
     int dlc;
     
-    int parsed = sscanf(line, "BO_ %d %31s : %d %23s", &canId, name, &dlc, transmitter);
+    // %31[^: ] یعنی "حداکثر ۳۱ کاراکتر که نه ':' باشد نه فاصله" - این
+    // scanset، بر خلاف %s، جلوی خودش را در ':' هم متوقف می‌کند، پس هم
+    // فرمت استاندارد بی‌فاصله ("Name: 8 XXX") و هم یک فرمت غیراستاندارد
+    // بافاصله ("Name : 8 XXX") را درست می‌خواند.
+    int parsed = sscanf(line, "BO_ %u %31[^: ] : %d %23s", &canId, name, &dlc, transmitter);
+    
     if (parsed >= 3) {
-        msg->canId = (uint32_t)canId;
+        msg->canId = canId;
         strncpy(msg->name, name, sizeof(msg->name) - 1);
         msg->dlc = (uint8_t)dlc;
         if (parsed >= 4) {
