@@ -60,6 +60,23 @@
         
         <!-- تب تنظیمات -->
         <div id="tab-settings" class="tab-content">
+            <div class="settings-group" id="password-warning-group" style="display:none; border: 2px solid #e74c3c;">
+                <h3 style="color:#e74c3c;">⚠️ رمز پیش‌فرض هنوز فعال است</h3>
+                <p>برای امنیت دستگاه، لطفاً همین الان رمز را تغییر دهید.</p>
+            </div>
+            <div class="settings-group">
+                <h3>🔐 تغییر رمز ورود</h3>
+                <form id="password-form">
+                    <p style="margin-bottom:6px;">نام کاربری جدید (اختیاری):</p>
+                    <input type="text" id="new-user" placeholder="خالی = بدون تغییر" style="width:100%; padding:8px; margin-bottom:8px; border-radius:6px; border:1px solid #444; background:#0f1a30; color:#eee;">
+                    <p style="margin-bottom:6px;">رمز جدید (حداقل ۸ کاراکتر):</p>
+                    <input type="password" id="new-pass" required minlength="8" style="width:100%; padding:8px; margin-bottom:8px; border-radius:6px; border:1px solid #444; background:#0f1a30; color:#eee;">
+                    <p style="margin-bottom:6px;">تکرار رمز جدید:</p>
+                    <input type="password" id="confirm-pass" required minlength="8" style="width:100%; padding:8px; margin-bottom:10px; border-radius:6px; border:1px solid #444; background:#0f1a30; color:#eee;">
+                    <button type="submit" class="ctrl-btn" style="width:100%; min-height:45px;">ذخیره رمز جدید</button>
+                    <p id="password-form-msg" style="margin-top:8px; font-size:0.85rem;"></p>
+                </form>
+            </div>
             <div class="settings-group">
                 <h3>WiFi</h3>
                 <p id="wifi-info">حالت: Access Point</p>
