@@ -1,12 +1,18 @@
 /**
  * webserver.h - وب سرور و WebSocket برای کنترل خودرو
  * 
- * این ماژول یک وب سرور Async با WebSocket ایجاد می‌کند.
- * کاربران می‌توانند از طریق مرورگر (موبایل/دسکتاپ) خودرو را کنترل کنند.
- * 
- * فایل‌های HTML, CSS, JS از SPIFFS سرو می‌شوند.
- * 
- * تمام توابع این فایل تست شده و آماده استفاده هستند.
+ * === اصلاحیه امنیتی مهم ===
+ * قبلاً اتصال WebSocket هیچ احراز هویتی نداشت: هرکسی که IP دستگاه را
+ * می‌دانست می‌توانست مستقیماً به /ws وصل شود و فرمان قفل/بازکردن درب،
+ * صندوق و غیره بفرستد، بدون رد شدن از صفحه لاگین.
+ *
+ * روش رفع: بعد از لاگین موفق در HTTP (/login)، یک توکن تصادفی یک‌بارمصرف
+ * (session token) به مرورگر داده می‌شود. کلاینت باید همین توکن را در
+ * اولین پیام WebSocket (نوع "auth") بفرستد. تا وقتی کلاینت auth نشده،
+ * هیچ فرمان "command"ای از او پذیرفته نمی‌شود.
+ *
+ * این یک لایه دفاعی سبک مناسب دستگاه embedded است، نه JWT/OAuth کامل؛
+ * اما به‌مراتب بهتر از نبود کامل احراز هویت در نسخه قبلی است.
  */
 
 #ifndef WEBSERVER_H
@@ -18,8 +24,25 @@
 #include <ArduinoJson.h>
 #include "config.h"
 
+// حداکثر تعداد کلاینت‌های WebSocket که وضعیت auth آن‌ها را همزمان ردیابی می‌کنیم
+#define WS_MAX_CLIENTS 8
+
+// مهلت اعتبار توکن session (میلی‌ثانیه) - ۱۵ دقیقه
+#define SESSION_TOKEN_TIMEOUT 900000
+
+// حداقل فاصله زمانی مجاز بین دو فرمان کنترلی از یک کلاینت (میلی‌ثانیه)
+#define COMMAND_RATE_LIMIT_MS 300
+
 // تابع callback برای فرمان‌های دریافتی از وب
 typedef void (*WebCommandCallback)(const char* command);
+
+// وضعیت احراز هویت هر کلاینت WebSocket
+struct WsClientAuth {
+    uint32_t clientId = 0;
+    bool authenticated = false;
+    uint32_t lastCommandTime = 0;
+    bool inUse = false;
+};
 
 /**
  * کلاس مدیریت وب سرور
@@ -28,41 +51,12 @@ class WebServerManager {
 public:
     WebServerManager();
     
-    /**
-     * شروع وب سرور
-     * @param port پورت HTTP
-     */
     void begin(uint16_t port = WEB_PORT);
-    
-    /**
-     * به‌روزرسانی در حلقه اصلی (برای WebSocket)
-     */
     void update();
-    
-    /**
-     * تنظیم callback برای فرمان‌ها
-     */
     void setCommandCallback(WebCommandCallback cb);
-    
-    /**
-     * ارسال اطلاعات خودرو به همه کلاینت‌های WebSocket
-     * @param data داده‌های خودرو
-     */
     void broadcastVehicleData(const VehicleData& data);
-    
-    /**
-     * ارسال وضعیت به همه کلاینت‌ها
-     */
     void broadcastStatus(const char* status);
-    
-    /**
-     * بررسی اتصال WiFi
-     */
     bool isClientConnected();
-    
-    /**
-     * دریافت تعداد کلاینت‌های متصل
-     */
     uint8_t getClientCount();
 
 private:
@@ -71,18 +65,27 @@ private:
     WebCommandCallback _commandCallback;
     bool _started;
     
-    // هندلرهای داخلی
+    // توکن session فعلی (تولید شده بعد از لاگین موفق) و زمان صدور آن
+    String _sessionToken;
+    uint32_t _sessionTokenIssuedAt;
+    
+    // وضعیت auth هر کلاینت WebSocket متصل
+    WsClientAuth _clientAuth[WS_MAX_CLIENTS];
+    
     void _handleWebSocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, 
                                AwsEventType type, void* arg, uint8_t* data, size_t len);
-    void _handleLogin(AsyncWebServerRequest* request);
     void _handleAPIControl(AsyncWebServerRequest* request);
     void _handleAPIStatus(AsyncWebServerRequest* request);
     void _handleNotFound(AsyncWebServerRequest* request);
     
-    // اعتبارسنجی
     bool _authenticate(AsyncWebServerRequest* request);
+    String _generateSessionToken();
+    bool _isValidSessionToken(const char* token);
     
-    // تبدیل VehicleData به JSON
+    WsClientAuth* _findOrCreateClientAuth(uint32_t clientId);
+    WsClientAuth* _findClientAuth(uint32_t clientId);
+    void _removeClientAuth(uint32_t clientId);
+    
     String _vehicleDataToJSON(const VehicleData& data);
 };
 

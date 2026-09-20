@@ -169,7 +169,19 @@ bool CANManager::receiveMessage(CanMessage& msg, uint32_t timeout) {
         msg.id = twaiMsg.identifier;
         msg.isExtended = twaiMsg.extd;
         msg.isRemote = twaiMsg.rtr;
-        msg.length = twaiMsg.data_length_code;
+        
+        // اصلاحیه: قبلاً data_length_code بدون بررسی مستقیماً استفاده می‌شد.
+        // اگر این مقدار (به دلیل باگ درایور یا فریم نامعتبر روی باس) بیش از
+        // ۸ باشد، حلقه پایین‌تر از بافر msg.data[8] عبور می‌کرد (heap/stack
+        // overflow). CAN Classic حداکثر DLC=8 دارد، پس هر مقدار بزرگ‌تر
+        // نامعتبر است و باید clamp شود.
+        uint8_t dlc = twaiMsg.data_length_code;
+        if (dlc > 8) {
+            Serial.printf("⚠️ [CAN] DLC نامعتبر دریافت شد: %d - به ۸ محدود شد\n", dlc);
+            dlc = 8;
+        }
+        msg.length = dlc;
+        
         for (int i = 0; i < msg.length; i++) {
             msg.data[i] = twaiMsg.data[i];
         }

@@ -136,6 +136,12 @@ void setup() {
     Serial.println("\n[INIT] ✅ CarTouch آماده به کار است!");
     Serial.printf("[INIT] IP: %s\n", wifiManager.getIP().toString().c_str());
     Serial.printf("[INIT] CAN: %s\n", canManager.isActive() ? "✅" : "❌");
+    
+    // اصلاحیه امنیتی: هشدار برجسته اگر رمز وب هنوز پیش‌فرض است
+    if (isUsingDefaultPassword()) {
+        Serial.println("⚠️⚠️⚠️ [SECURITY] رمز وب هنوز پیش‌فرض است! لطفاً از منوی تنظیمات تغییرش دهید ⚠️⚠️⚠️");
+        tftUI.showNotification("⚠️ لطفاً رمز پیش‌فرض را عوض کنید!");
+    }
 }
 
 // ======================== حلقه اصلی ========================

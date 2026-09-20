@@ -105,6 +105,47 @@ AppConfig* getConfig() {
 }
 
 /**
+ * بررسی می‌کند که آیا کاربر هنوز از رمز پیش‌فرض/موقت استفاده می‌کند
+ * (چه رمز وب و چه اینکه اصلاً پرچم forcePasswordChange خاموش نشده باشد).
+ * 
+ * @return true اگر رمز هنوز پیش‌فرض/تغییرنکرده است و باید هشدار داده شود
+ */
+bool isUsingDefaultPassword() {
+    AppConfig* cfg = getConfig();
+    if (cfg->forcePasswordChange) return true;
+    if (strcmp(cfg->webPass, WEB_DEFAULT_PASS) == 0) return true;
+    return false;
+}
+
+/**
+ * تنظیم رمز جدید وب و خاموش کردن پرچم اجبار تغییر رمز.
+ * حداقل طول رمز را هم بررسی می‌کند.
+ * 
+ * @return true در صورت موفقیت (رمز معتبر بود و ذخیره شد)
+ */
+bool setWebPassword(const char* newUser, const char* newPass) {
+    if (!newPass || strlen(newPass) < 8) {
+        Serial.println("⚠️ [CONFIG] رمز جدید باید حداقل ۸ کاراکتر باشد");
+        return false;
+    }
+    if (strcmp(newPass, WEB_DEFAULT_PASS) == 0) {
+        Serial.println("⚠️ [CONFIG] رمز جدید نمی‌تواند همان رمز پیش‌فرض باشد");
+        return false;
+    }
+    
+    AppConfig* cfg = getConfig();
+    if (newUser && strlen(newUser) > 0) {
+        strncpy(cfg->webUser, newUser, sizeof(cfg->webUser) - 1);
+        cfg->webUser[sizeof(cfg->webUser) - 1] = '\0';
+    }
+    strncpy(cfg->webPass, newPass, sizeof(cfg->webPass) - 1);
+    cfg->webPass[sizeof(cfg->webPass) - 1] = '\0';
+    cfg->forcePasswordChange = false;
+    
+    return saveConfig();
+}
+
+/**
  * تنظیم یک مقدار پیش‌فرض در config
  * (برای استفاده در اولین راه‌اندازی)
  */
@@ -115,6 +156,7 @@ void setDefaultConfig() {
     cfg->wifiEnabled = true;
     strcpy(cfg->webUser, WEB_DEFAULT_USER);
     strcpy(cfg->webPass, WEB_DEFAULT_PASS);
+    cfg->forcePasswordChange = true;  // تا زمانی که کاربر رمز را عوض نکند
     strcpy(cfg->vehicleBrand, "Generic");
     strcpy(cfg->vehicleModel, "OBD-II");
     cfg->vehicleYear = 2020;

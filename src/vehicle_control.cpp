@@ -11,6 +11,7 @@
 
 VehicleControl::VehicleControl(CANManager& canManager) : _can(canManager) {
     _lastError = 0;
+    _lastCommandTime = 0;
     
     // CAN IDهای پیش‌فرض (بر اساس خودروهای رایج)
     _canIdDoorLock = 0x1A0;
@@ -35,6 +36,17 @@ bool VehicleControl::_sendCommand(uint32_t canId, const uint8_t* data, uint8_t l
         _lastError = 1;
         return false;
     }
+    
+    // اصلاحیه: جلوگیری از ارسال فرمان‌های فیزیکی با سرعت خیلی بالا
+    // (مثلاً اگر UI/وب باگ داشته باشد یا کسی fuzzing کند) که می‌تواند
+    // به موتورهای شیشه/قفل درب فشار مکانیکی غیرعادی وارد کند.
+    uint32_t now = millis();
+    if (now - _lastCommandTime < MIN_COMMAND_INTERVAL_MS) {
+        Serial.println("⚠️ [CTRL] فرمان خیلی سریع پشت‌سرهم - نادیده گرفته شد (rate limit)");
+        _lastError = 3;
+        return false;
+    }
+    _lastCommandTime = now;
     
     CanMessage msg;
     msg.id = canId;

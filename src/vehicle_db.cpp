@@ -91,6 +91,19 @@ bool VehicleDB::loadDBCFile(const char* filename) {
         int len = file.readBytesUntil('\n', line, sizeof(line) - 1);
         line[len] = '\0';
         
+        // اصلاحیه: اگر خط فایل DBC بلندتر از بافر (۱۲۷ کاراکتر) باشد،
+        // readBytesUntil آن را بی‌صدا truncate می‌کند و باقی خط به عنوان
+        // "خط بعدی" نامعتبر خوانده می‌شود که می‌تواند کل پارس را به‌هم بزند.
+        // حداقل یک هشدار می‌دهیم تا مشکل قابل تشخیص باشد.
+        if (len == (int)(sizeof(line) - 1) && file.available()) {
+            Serial.println("⚠️ [DB] یک خط DBC طولانی‌تر از حد مجاز (۱۲۷ کاراکتر) بود و ممکن است truncate شده باشد");
+            // بقیه همین خط فیزیکی را دور بریز تا به عنوان خط جدید پارس نشود
+            while (file.available() && file.peek() != '\n') {
+                file.read();
+            }
+            if (file.available()) file.read(); // خود کاراکتر '\n'
+        }
+        
         // حذف carriage return
         char* cr = strchr(line, '\r');
         if (cr) *cr = '\0';
@@ -148,6 +161,16 @@ bool VehicleDB::_parseMessageLine(const char* line) {
 // ======================== پارس کردن خط SG_ (سیگنال) ========================
 
 bool VehicleDB::_parseSignalLine(const char* line) {
+    // اصلاحیه: قبلاً اگر این تابع با _messageCount == 0 صدا زده می‌شد
+    // (که فقط به لطف چک بیرونی در loadDBCFile رخ نمی‌داد)، عبارت
+    // _messageCount - 1 روی uint8_t سرریز می‌شد (0 - 1 = 255) و به یک
+    // آدرس کاملاً خارج از آرایه _messages دسترسی پیدا می‌کرد. این تابع
+    // را مستقل و ایمن می‌کنیم تا به چک بیرونی متکی نباشد.
+    if (_messageCount == 0) {
+        Serial.println("⚠️ [DB] خط SG_ قبل از هر BO_ دیده شد - نادیده گرفته شد");
+        return false;
+    }
+    
     DbcMessage* msg = &_messages[_messageCount - 1];
     if (!msg || msg->signalCount >= MAX_DBC_SIGNALS) return false;
     

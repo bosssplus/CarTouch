@@ -107,10 +107,25 @@ private:
     lv_obj_t* _statusWiFi;
     lv_obj_t* _notification;
     
+    // ==================== صفحه تغییر رمز ====================
+    // اصلاحیه: صفحه/دیالوگ مودال برای تغییر رمز وب از طریق نمایشگر لمسی،
+    // با کیبورد مجازی LVGL. دکمه "تغییر رمز" در تب تنظیمات این را باز می‌کند.
+    lv_obj_t* _passwordScreen;       // کانتینر مودال کل صفحه تغییر رمز
+    lv_obj_t* _passwordWarningLabel; // برچسب هشدار "رمز پیش‌فرض" در تب تنظیمات
+    lv_obj_t* _taNewPass;            // فیلد رمز جدید
+    lv_obj_t* _taConfirmPass;        // فیلد تکرار رمز
+    lv_obj_t* _passwordErrorLabel;   // برچسب خطا داخل مودال
+    lv_obj_t* _keyboard;             // کیبورد مجازی مشترک
+    
     // تابع‌های داخلی برای ساختن صفحات
     void _buildTabControl();
     void _buildTabDashboard();
     void _buildTabSettings();
+    void _buildPasswordScreen();
+    void _openPasswordScreen();
+    void _closePasswordScreen();
+    void _submitPasswordChange();
+    void _refreshPasswordWarning();
     
     // Event handlers
     static void _btnLockEventHandler(lv_event_t* e);
@@ -124,6 +139,10 @@ private:
     static void _btnThemeEventHandler(lv_event_t* e);
     static void _btnListenOnlyEventHandler(lv_event_t* e);
     static void _btnVehicleSelectEventHandler(lv_event_t* e);
+    static void _btnChangePasswordEventHandler(lv_event_t* e);
+    static void _btnPasswordSaveEventHandler(lv_event_t* e);
+    static void _btnPasswordCancelEventHandler(lv_event_t* e);
+    static void _taFocusEventHandler(lv_event_t* e);
     
     // LVGL display buffer
     static lv_disp_draw_buf_t _dispBuf;

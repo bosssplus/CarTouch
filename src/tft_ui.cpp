@@ -62,6 +62,12 @@ TFT_UI::TFT_UI() {
     _controlCallback = nullptr;
     _currentMode = MODE_ACTIVE;
     memset(&_vehicleData, 0, sizeof(VehicleData));
+    _passwordScreen = nullptr;
+    _passwordWarningLabel = nullptr;
+    _taNewPass = nullptr;
+    _taConfirmPass = nullptr;
+    _passwordErrorLabel = nullptr;
+    _keyboard = nullptr;
     pThisUI = this;
 }
 
@@ -105,6 +111,8 @@ void TFT_UI::begin() {
     _buildTabControl();
     _buildTabDashboard();
     _buildTabSettings();
+    _buildPasswordScreen();
+    _refreshPasswordWarning();
     
     _initialized = true;
     Serial.println("[TFT] صفحه نمایش با موفقیت مقداردهی شد ✓");
@@ -115,6 +123,13 @@ void TFT_UI::begin() {
 void TFT_UI::update() {
     if (!_initialized) return;
     lv_timer_handler();
+    
+    // بررسی دوره‌ای وضعیت رمز پیش‌فرض (مثلاً اگر از طریق صفحه وب تغییر کرده باشد)
+    static uint32_t lastPasswordCheck = 0;
+    if (millis() - lastPasswordCheck > 5000) {
+        _refreshPasswordWarning();
+        lastPasswordCheck = millis();
+    }
 }
 
 // ======================== تنظیم callback ========================
@@ -276,10 +291,17 @@ void TFT_UI::_buildTabSettings() {
     lv_label_set_text(labelTitle, "تنظیمات");
     lv_obj_set_style_text_font(labelTitle, lv_font_montserrat_20, 0);
     
+    // برچسب هشدار رمز پیش‌فرض (در ابتدا مخفی، با _refreshPasswordWarning آپدیت می‌شود)
+    _passwordWarningLabel = lv_label_create(_tabSettings);
+    lv_obj_set_pos(_passwordWarningLabel, 10, 40);
+    lv_label_set_text(_passwordWarningLabel, "⚠️ رمز پیش‌فرض فعال است - تغییر دهید");
+    lv_obj_set_style_text_color(_passwordWarningLabel, lv_color_hex(0xFF4444), 0);
+    lv_obj_add_flag(_passwordWarningLabel, LV_OBJ_FLAG_HIDDEN);
+    
     // دکمه انتخاب خودرو
     lv_obj_t* btnVehicle = lv_btn_create(_tabSettings);
     lv_obj_set_size(btnVehicle, 220, 45);
-    lv_obj_set_pos(btnVehicle, 10, 50);
+    lv_obj_set_pos(btnVehicle, 10, 65);
     lv_obj_add_event_cb(btnVehicle, _btnVehicleSelectEventHandler, LV_EVENT_CLICKED, NULL);
     lv_obj_t* labelVehicle = lv_label_create(btnVehicle);
     lv_label_set_text(labelVehicle, "🚗 انتخاب خودرو");
@@ -288,19 +310,156 @@ void TFT_UI::_buildTabSettings() {
     // دکمه تغییر تم
     lv_obj_t* btnTheme = lv_btn_create(_tabSettings);
     lv_obj_set_size(btnTheme, 220, 45);
-    lv_obj_set_pos(btnTheme, 10, 110);
+    lv_obj_set_pos(btnTheme, 10, 120);
     lv_obj_add_event_cb(btnTheme, _btnThemeEventHandler, LV_EVENT_CLICKED, NULL);
     lv_obj_t* labelTheme = lv_label_create(btnTheme);
     lv_label_set_text(labelTheme, "🌙 حالت شب/روز");
     lv_obj_center(labelTheme);
     
+    // دکمه تغییر رمز
+    lv_obj_t* btnPassword = lv_btn_create(_tabSettings);
+    lv_obj_set_size(btnPassword, 220, 45);
+    lv_obj_set_pos(btnPassword, 10, 175);
+    lv_obj_set_style_bg_color(btnPassword, lv_color_hex(0xB33A3A), 0);
+    lv_obj_add_event_cb(btnPassword, _btnChangePasswordEventHandler, LV_EVENT_CLICKED, NULL);
+    lv_obj_t* labelPassword = lv_label_create(btnPassword);
+    lv_label_set_text(labelPassword, "🔐 تغییر رمز ورود");
+    lv_obj_center(labelPassword);
+    
     // توضیحات
     lv_obj_t* labelInfo = lv_label_create(_tabSettings);
-    lv_obj_set_pos(labelInfo, 10, 180);
+    lv_obj_set_pos(labelInfo, 10, 230);
     lv_label_set_text(labelInfo, 
         "⚠ خودرو باید خاموش باشد\n"
         "قبل از نصب باتری را جدا کنید\n"
         "CarTouch v1.0");
+}
+
+// ======================== صفحه تغییر رمز ========================
+
+void TFT_UI::_buildPasswordScreen() {
+    // یک کانتینر تمام‌صفحه که در حالت عادی مخفی است و فقط با دکمه
+    // "تغییر رمز ورود" ظاهر می‌شود (مودال ساده روی همه چیز دیگر).
+    _passwordScreen = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(_passwordScreen, TFT_WIDTH, TFT_HEIGHT);
+    lv_obj_set_pos(_passwordScreen, 0, 0);
+    lv_obj_set_style_bg_color(_passwordScreen, lv_color_hex(0x0F1A30), 0);
+    lv_obj_set_style_bg_opa(_passwordScreen, LV_OPA_COVER, 0);
+    lv_obj_add_flag(_passwordScreen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(_passwordScreen, LV_OBJ_FLAG_SCROLLABLE);
+    
+    lv_obj_t* title = lv_label_create(_passwordScreen);
+    lv_obj_set_pos(title, 10, 10);
+    lv_label_set_text(title, "🔐 تغییر رمز ورود");
+    lv_obj_set_style_text_font(title, lv_font_montserrat_20, 0);
+    
+    lv_obj_t* lblNew = lv_label_create(_passwordScreen);
+    lv_obj_set_pos(lblNew, 10, 45);
+    lv_label_set_text(lblNew, "رمز جدید (حداقل ۸ کاراکتر):");
+    
+    _taNewPass = lv_textarea_create(_passwordScreen);
+    lv_obj_set_size(_taNewPass, 220, 35);
+    lv_obj_set_pos(_taNewPass, 10, 65);
+    lv_textarea_set_password_mode(_taNewPass, true);
+    lv_textarea_set_one_line(_taNewPass, true);
+    lv_textarea_set_max_length(_taNewPass, 15);  // با توجه به webPass[16] در AppConfig
+    lv_obj_add_event_cb(_taNewPass, _taFocusEventHandler, LV_EVENT_FOCUSED, NULL);
+    
+    lv_obj_t* lblConfirm = lv_label_create(_passwordScreen);
+    lv_obj_set_pos(lblConfirm, 10, 110);
+    lv_label_set_text(lblConfirm, "تکرار رمز جدید:");
+    
+    _taConfirmPass = lv_textarea_create(_passwordScreen);
+    lv_obj_set_size(_taConfirmPass, 220, 35);
+    lv_obj_set_pos(_taConfirmPass, 10, 130);
+    lv_textarea_set_password_mode(_taConfirmPass, true);
+    lv_textarea_set_one_line(_taConfirmPass, true);
+    lv_textarea_set_max_length(_taConfirmPass, 15);
+    lv_obj_add_event_cb(_taConfirmPass, _taFocusEventHandler, LV_EVENT_FOCUSED, NULL);
+    
+    _passwordErrorLabel = lv_label_create(_passwordScreen);
+    lv_obj_set_pos(_passwordErrorLabel, 10, 175);
+    lv_label_set_text(_passwordErrorLabel, "");
+    lv_obj_set_style_text_color(_passwordErrorLabel, lv_color_hex(0xFF4444), 0);
+    lv_label_set_long_mode(_passwordErrorLabel, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(_passwordErrorLabel, 220);
+    
+    // دکمه‌های ذخیره/انصراف
+    lv_obj_t* btnSave = lv_btn_create(_passwordScreen);
+    lv_obj_set_size(btnSave, 105, 40);
+    lv_obj_set_pos(btnSave, 10, 210);
+    lv_obj_set_style_bg_color(btnSave, lv_color_hex(0x2ECC71), 0);
+    lv_obj_add_event_cb(btnSave, _btnPasswordSaveEventHandler, LV_EVENT_CLICKED, NULL);
+    lv_obj_t* labelSave = lv_label_create(btnSave);
+    lv_label_set_text(labelSave, "✅ ذخیره");
+    lv_obj_center(labelSave);
+    
+    lv_obj_t* btnCancel = lv_btn_create(_passwordScreen);
+    lv_obj_set_size(btnCancel, 105, 40);
+    lv_obj_set_pos(btnCancel, 125, 210);
+    lv_obj_set_style_bg_color(btnCancel, lv_color_hex(0x555555), 0);
+    lv_obj_add_event_cb(btnCancel, _btnPasswordCancelEventHandler, LV_EVENT_CLICKED, NULL);
+    lv_obj_t* labelCancel = lv_label_create(btnCancel);
+    lv_label_set_text(labelCancel, "❌ انصراف");
+    lv_obj_center(labelCancel);
+    
+    // کیبورد مجازی - در ابتدا مخفی، فقط وقتی یک textarea فوکوس می‌گیرد نمایش داده می‌شود
+    _keyboard = lv_keyboard_create(_passwordScreen);
+    lv_obj_set_size(_keyboard, TFT_WIDTH, 120);
+    lv_obj_align(_keyboard, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_keyboard_set_mode(_keyboard, LV_KEYBOARD_MODE_TEXT_LOWER);
+    lv_obj_add_flag(_keyboard, LV_OBJ_FLAG_HIDDEN);
+    // کیبورد را به فیلد فعال متصل می‌کنیم - در _taFocusEventHandler انجام می‌شود
+}
+
+void TFT_UI::_openPasswordScreen() {
+    if (!_passwordScreen) return;
+    lv_textarea_set_text(_taNewPass, "");
+    lv_textarea_set_text(_taConfirmPass, "");
+    lv_label_set_text(_passwordErrorLabel, "");
+    lv_obj_add_flag(_keyboard, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(_passwordScreen, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(_passwordScreen);
+}
+
+void TFT_UI::_closePasswordScreen() {
+    if (!_passwordScreen) return;
+    lv_obj_add_flag(_passwordScreen, LV_OBJ_FLAG_HIDDEN);
+}
+
+void TFT_UI::_refreshPasswordWarning() {
+    if (!_passwordWarningLabel) return;
+    if (isUsingDefaultPassword()) {
+        lv_obj_clear_flag(_passwordWarningLabel, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(_passwordWarningLabel, LV_OBJ_FLAG_HIDDEN);
+    }
+}
+
+void TFT_UI::_submitPasswordChange() {
+    if (!_taNewPass || !_taConfirmPass || !_passwordErrorLabel) return;
+    
+    const char* newPass = lv_textarea_get_text(_taNewPass);
+    const char* confirmPass = lv_textarea_get_text(_taConfirmPass);
+    
+    if (strlen(newPass) < 8) {
+        lv_label_set_text(_passwordErrorLabel, "رمز باید حداقل ۸ کاراکتر باشد");
+        return;
+    }
+    if (strcmp(newPass, confirmPass) != 0) {
+        lv_label_set_text(_passwordErrorLabel, "تکرار رمز مطابقت ندارد");
+        return;
+    }
+    
+    // نام کاربری از طریق نمایشگر لمسی تغییر نمی‌کند (فقط رمز)؛ nullptr یعنی بدون تغییر
+    bool ok = setWebPassword(nullptr, newPass);
+    if (ok) {
+        _closePasswordScreen();
+        _refreshPasswordWarning();
+        showNotification("✅ رمز با موفقیت تغییر کرد");
+    } else {
+        lv_label_set_text(_passwordErrorLabel, "رمز باید حداقل ۸ کاراکتر و متفاوت از پیش‌فرض باشد");
+    }
 }
 
 // ======================== Event Handler: قفل ========================
@@ -380,6 +539,35 @@ void TFT_UI::_btnVehicleSelectEventHandler(lv_event_t* e) {
     if (pThisUI && pThisUI->_controlCallback) {
         pThisUI->_controlCallback("vehicle_select");
     }
+}
+
+void TFT_UI::_btnChangePasswordEventHandler(lv_event_t* e) {
+    if (pThisUI) {
+        pThisUI->_openPasswordScreen();
+    }
+}
+
+void TFT_UI::_btnPasswordSaveEventHandler(lv_event_t* e) {
+    if (pThisUI) {
+        pThisUI->_submitPasswordChange();
+    }
+}
+
+void TFT_UI::_btnPasswordCancelEventHandler(lv_event_t* e) {
+    if (pThisUI) {
+        pThisUI->_closePasswordScreen();
+    }
+}
+
+// وقتی یکی از فیلدهای رمز فوکوس می‌گیرد، کیبورد مجازی را به همان فیلد
+// متصل کرده و نمایش می‌دهیم؛ در غیر این صورت کیبورد جای زیادی از صفحه
+// کوچک TFT را بی‌جهت اشغال می‌کند.
+void TFT_UI::_taFocusEventHandler(lv_event_t* e) {
+    if (!pThisUI || !pThisUI->_keyboard) return;
+    lv_obj_t* ta = lv_event_get_target(e);
+    lv_keyboard_set_textarea(pThisUI->_keyboard, ta);
+    lv_obj_clear_flag(pThisUI->_keyboard, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_move_foreground(pThisUI->_keyboard);
 }
 
 // ======================== به‌روزرسانی اطلاعات Dashboard ========================
