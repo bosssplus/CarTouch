@@ -330,13 +330,13 @@ void TFT_UI::_buildTabDashboard() {
     _labelSpeed = lv_label_create(_tabDashboard);
     lv_obj_set_pos(_labelSpeed, 10, 10);
     lv_label_set_text(_labelSpeed, "۰ km/h");
-    lv_obj_set_style_text_font(_labelSpeed, lv_font_montserrat_48, 0);
+    lv_obj_set_style_text_font(_labelSpeed, &lv_font_montserrat_48, 0);
     lv_obj_set_style_text_color(_labelSpeed, lv_color_hex(0x00FF00), 0);
     
     _labelRPM = lv_label_create(_tabDashboard);
     lv_obj_set_pos(_labelRPM, 10, 70);
     lv_label_set_text(_labelRPM, "RPM: ۰");
-    lv_obj_set_style_text_font(_labelRPM, lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(_labelRPM, &lv_font_montserrat_20, 0);
     
     _labelTemp = lv_label_create(_tabDashboard);
     lv_obj_set_pos(_labelTemp, 10, 100);
@@ -363,7 +363,7 @@ void TFT_UI::_buildTabSettings() {
     lv_obj_t* labelTitle = lv_label_create(_tabSettings);
     lv_obj_set_pos(labelTitle, 10, 10);
     lv_label_set_text(labelTitle, "تنظیمات");
-    lv_obj_set_style_text_font(labelTitle, lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(labelTitle, &lv_font_montserrat_20, 0);
     
     _passwordWarningLabel = lv_label_create(_tabSettings);
     lv_obj_set_pos(_passwordWarningLabel, 10, 40);
@@ -415,7 +415,7 @@ void TFT_UI::_buildTabLearn() {
     lv_obj_t* title = lv_label_create(_tabLearn);
     lv_obj_set_pos(title, 10, 5);
     lv_label_set_text(title, "🎓 یادگیری فرمان از خودرو");
-    lv_obj_set_style_text_font(title, lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
     
     _learnActiveVehicleLabel = lv_label_create(_tabLearn);
     lv_obj_set_pos(_learnActiveVehicleLabel, 10, 35);
@@ -526,7 +526,7 @@ void TFT_UI::_buildLearnWizardScreen() {
     _learnWizardTitle = lv_label_create(_learnWizardScreen);
     lv_obj_set_pos(_learnWizardTitle, 10, 8);
     lv_label_set_text(_learnWizardTitle, "🎓 یادگیری فرمان");
-    lv_obj_set_style_text_font(_learnWizardTitle, lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(_learnWizardTitle, &lv_font_montserrat_20, 0);
     
     // انتخاب برچسب فرمان (فقط در حالت IDLE قابل تغییر)
     lv_obj_t* lblChoose = lv_label_create(_learnWizardScreen);
@@ -791,7 +791,7 @@ void TFT_UI::_buildManualEntryScreen() {
     lv_obj_t* title = lv_label_create(_manualEntryScreen);
     lv_obj_set_pos(title, 10, 8);
     lv_label_set_text(title, "✍️ ورود دستی فرمان");
-    lv_obj_set_style_text_font(title, lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
     
     lv_obj_t* lblChoose = lv_label_create(_manualEntryScreen);
     lv_obj_set_pos(lblChoose, 10, 38);
@@ -955,7 +955,7 @@ void TFT_UI::_buildVerifyScreen() {
     lv_obj_t* title = lv_label_create(_verifyScreen);
     lv_obj_set_pos(title, 10, 8);
     lv_label_set_text(title, "⚠️ تأیید فرمان تست‌نشده");
-    lv_obj_set_style_text_font(title, lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0xFF4444), 0);
     
     _verifyInfoLabel = lv_label_create(_verifyScreen);
@@ -1076,7 +1076,7 @@ void TFT_UI::_buildPasswordScreen() {
     lv_obj_t* title = lv_label_create(_passwordScreen);
     lv_obj_set_pos(title, 10, 10);
     lv_label_set_text(title, "🔐 تغییر رمز ورود");
-    lv_obj_set_style_text_font(title, lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
     
     lv_obj_t* lblNew = lv_label_create(_passwordScreen);
     lv_obj_set_pos(lblNew, 10, 45);
