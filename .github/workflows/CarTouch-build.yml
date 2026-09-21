@@ -49,12 +49,28 @@ jobs:
         run: pio check -e esp32-s3-devkitc-1 --skip-packages
         continue-on-error: true
 
+      # 3.5) رمزگشایی بک‌ترِیس کرش (Guru Meditation) - فقط اطلاع‌رسانی
+      #    آدرس‌ها را از لاگ سریال بردار و در BACKTRACE بگذار.
+      #    اگر SHA اولِ خروجی با «ELF file SHA256» لاگ برد یکی نبود، آدرس‌ها معتبر نیستند.
+      - name: Decode crash backtrace
+        continue-on-error: true
+        env:
+          BACKTRACE: "0x4200f0a8 0x4200f185 0x4200f190 0x42008e09 0x42006e6a 0x420455ca"
+        run: |
+          ELF=.pio/build/esp32-s3-devkitc-1/firmware.elf
+          echo "ELF SHA256 (16 char اول): $(sha256sum $ELF | cut -c1-16)"
+          A2L=$(find ~/.platformio -name 'xtensa-esp32s3-elf-addr2line' | head -1)
+          echo "addr2line: $A2L"
+          $A2L -pfiaC -e $ELF $BACKTRACE
+
       # 4) آپلود فایل‌های نهایی فلش به‌عنوان Artifact
       #    شامل: firmware.bin, bootloader.bin, partitions.bin, spiffs.bin
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
           name: cartouch-firmware
-          path: .pio/build/esp32-s3-devkitc-1/*.bin
+          path: |
+            .pio/build/esp32-s3-devkitc-1/*.bin
+            .pio/build/esp32-s3-devkitc-1/firmware.elf
           if-no-files-found: error
           retention-days: 30
