@@ -129,11 +129,12 @@ void setup() {
     // 7. شروع Vehicle Control (حالا با activeProfileManager)
     vehicleControl.begin();
     
-    // پیش‌فرض: خودروی فعال از تنظیمات ذخیره‌شده (مسیر DBC، مثل v1.0)
-    {
-        AppConfig* cfg = getConfig();
-        activeProfileManager.selectDBCVehicle(cfg->vehicleBrand, cfg->vehicleModel);
-    }
+    // === تغییر: با روشن شدن، هیچ خودرویی خودکار انتخاب نمی‌شود ===
+    // activeProfileManager از قبل با ACTIVE_KIND_NONE مقداردهی اولیه شده
+    // (نگاه کنید به سازنده‌ی ActiveProfileManager). کاربر باید از منوی
+    // TFT یا تب «کنترل»/«تنظیمات» در وب، خودرو را دستی انتخاب کند.
+    // تا آن زمان resolveCommand() پیام «هیچ خودرویی انتخاب نشده است»
+    // برمی‌گرداند - نه کرش و نه ارسال فرمان اشتباه.
     
     // 8. شروع TFT و LVGL
     // === جدید v2.0: اتصال ماژول‌های Learn Mode به TFT قبل از begin() ===
