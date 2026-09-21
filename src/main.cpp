@@ -187,7 +187,8 @@ void loop() {
     learnEngine.update();
     
     // 4. خواندن داده‌های OBD-II (دوره‌ای)
-    if (currentMode == MODE_ACTIVE && 
+    // در حالت Listen-Only هیچ درخواست OBD ارسال نمی‌شود (خواندن OBD نیازمند ارسال درخواست است)
+    if (currentMode == MODE_ACTIVE && !getConfig()->listenOnlyMode &&
         millis() - lastDataUpdateTime > obdReadInterval) {
         updateVehicleData();
         lastDataUpdateTime = millis();

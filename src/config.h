@@ -214,7 +214,7 @@ struct AppConfig {
     
     // CAN
     uint32_t canSpeed = CAN_SPEED;
-    bool listenOnlyMode = false;
+    bool listenOnlyMode = true;   // پیش‌فرض ایمن: فقط شنود، هیچ فریمی روی باس ارسال نمی‌شود
     
     // انرژی
     uint32_t sleepTimeout = AUTO_SLEEP_TIMEOUT;

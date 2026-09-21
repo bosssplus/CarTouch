@@ -164,7 +164,7 @@ void setDefaultConfig() {
     cfg->brightnessDay = TFT_BRIGHTNESS_DAY;
     cfg->brightnessNight = TFT_BRIGHTNESS_NIGHT;
     cfg->canSpeed = CAN_SPEED;
-    cfg->listenOnlyMode = false;
+    cfg->listenOnlyMode = true;   // پیش‌فرض ایمن: فقط شنود
     cfg->sleepTimeout = AUTO_SLEEP_TIMEOUT;
     saveConfig();
 }
