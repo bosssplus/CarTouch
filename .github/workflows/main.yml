@@ -1,0 +1,62 @@
+name: Build Firmware
+
+# اجرا: با هر push یا Pull Request به main، و امکان اجرای دستی از تب Actions
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (esp32-s3-devkitc-1)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # کش کردن پکیج‌های PlatformIO برای سرعت بیشتر در اجراهای بعدی
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      # مرحله تست/اعتبارسنجی: اگه کد خطای کامپایل داشته باشه، اینجا fail میشه
+      - name: Build firmware
+        run: pio run -e esp32-s3-devkitc-1
+
+      # جمع‌آوری فایل‌های نهایی فلش (خروجی مشابه چیزی که با pio run تولید میشه)
+      - name: Collect build output
+        run: |
+          mkdir -p artifact-output/esp32-s3-devkitc-1
+          BUILD_DIR=.pio/build/esp32-s3-devkitc-1
+          cp "$BUILD_DIR/firmware.bin" artifact-output/esp32-s3-devkitc-1/
+          cp "$BUILD_DIR/bootloader.bin" artifact-output/esp32-s3-devkitc-1/
+          cp "$BUILD_DIR/partitions.bin" artifact-output/esp32-s3-devkitc-1/
+          # merged/spiffs.bin ممکنه بسته به تنظیمات وجود نداشته باشه، در این صورت رد میشه
+          if [ -f "$BUILD_DIR/spiffs.bin" ]; then
+            cp "$BUILD_DIR/spiffs.bin" artifact-output/esp32-s3-devkitc-1/
+          fi
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cartouch-firmware
+          path: artifact-output/esp32-s3-devkitc-1/
+          if-no-files-found: error
+          retention-days: 30
