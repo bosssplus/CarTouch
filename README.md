@@ -183,7 +183,7 @@ flowchart LR
 **پیش‌نیازها:** [VS Code](https://code.visualstudio.com/) + افزونه‌ی PlatformIO + Git
 
 ```bash
-git clone https://github.com/<USERNAME>/CarTouch.git
+git clone https://github.com/bosssplus/CarTouch.git
 cd CarTouch
 
 pio run -t upload      # کامپایل و آپلود فریمویر
