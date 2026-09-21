@@ -63,6 +63,26 @@ jobs:
           echo "addr2line: $A2L"
           $A2L -pfiaC -e $ELF $BACKTRACE
 
+      # 3.6) بازرسی محل کرش TFT_eSPI (فقط اطلاع‌رسانی، بیلد را fail نمی‌کند)
+      #    خروجی این مرحله را در لاگ Actions ببین و بفرست.
+      - name: Inspect TFT_eSPI crash site
+        continue-on-error: true
+        run: |
+          ELF=.pio/build/esp32-s3-devkitc-1/firmware.elf
+          LIB=.pio/libdeps/esp32-s3-devkitc-1/TFT_eSPI
+          FW=~/.platformio/packages/framework-arduinoespressif32
+          OBJDUMP=$(find ~/.platformio -name 'xtensa-esp32s3-elf-objdump' | head -1)
+          echo "===== 1) دیس‌اسمبلی اطراف PC کرش ====="
+          $OBJDUMP -d --start-address=0x4200f070 --stop-address=0x4200f0c0 $ELF || true
+          echo "===== 2) سورس TFT_eSPI.cpp خطوط 70 تا 90 ====="
+          sed -n '70,90p' $LIB/TFT_eSPI.cpp || true
+          echo "===== 3) تعریف SPI_PORT و _spi_user در TFT_eSPI ====="
+          grep -rn "SPI_PORT\|USE_HSPI_PORT\|USE_FSPI_PORT\|_spi_user\|SET_BUS_WRITE_MODE" $LIB/Processors/TFT_eSPI_ESP32_S3.h $LIB/TFT_eSPI.h | head -40 || true
+          echo "===== 4) تعریف FSPI/HSPI/VSPI در هسته آردوینو ====="
+          grep -n "define FSPI\|define HSPI\|define VSPI" $FW/cores/esp32/esp32-hal-spi.h || true
+          echo "===== 5) REG_SPI_BASE در SDK ====="
+          grep -rn "define REG_SPI_BASE" $FW/tools/sdk/esp32s3/include | head -5 || true
+
       # 4) آپلود فایل‌های نهایی فلش به‌عنوان Artifact
       #    شامل: firmware.bin, bootloader.bin, partitions.bin, spiffs.bin
       - name: Upload firmware artifact
