@@ -110,6 +110,16 @@ private:
     void _handleAPIControl(AsyncWebServerRequest* request);
     void _handleAPIStatus(AsyncWebServerRequest* request);
     void _handleNotFound(AsyncWebServerRequest* request);
+
+    // === جدید: به‌روزرسانی OTA از طریق وب (/update) - پشت همان احراز هویت ===
+    void _handleOtaUpload(AsyncWebServerRequest* request, const String& filename,
+                          size_t index, uint8_t* data, size_t len, bool final);
+    void _handleOtaFinished(AsyncWebServerRequest* request);
+    String _otaError;          // خطای آخرین آپلود (خالی = بدون خطا)
+    size_t _otaBytes;          // تعداد بایت‌های نوشته‌شده در آپلود جاری
+    bool _otaIsFs;             // true = آپلود ایمیج فایل‌سیستم (spiffs.bin)
+    bool _rebootPending;       // ریست بعد از OTA موفق (در update() انجام می‌شود)
+    uint32_t _rebootAt;
     
     bool _authenticate(AsyncWebServerRequest* request);
     String _generateSessionToken();

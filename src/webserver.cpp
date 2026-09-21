@@ -10,6 +10,62 @@
 #include "custom_vehicle.h"
 #include <SPIFFS.h>
 #include <esp_random.h>
+#include <Update.h>
+
+// ======================== صفحه‌ی OTA (داخل خود فریمویر، مستقل از SPIFFS) ========================
+// عمداً در فریمویر است نه SPIFFS: حتی اگر فایل‌های وب خراب باشند، این صفحه کار می‌کند.
+static const char OTA_PAGE_HTML[] PROGMEM = R"rawliteral(<!DOCTYPE html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CarTouch - به‌روزرسانی</title>
+<style>
+body{font-family:sans-serif;background:#0f1a30;color:#eee;margin:0;padding:16px}
+.card{background:#16213e;border-radius:10px;padding:14px;margin-bottom:14px}
+h3{margin:0 0 8px}
+input[type=file]{width:100%;margin:8px 0}
+button{width:100%;padding:12px;border:0;border-radius:8px;background:#e94560;color:#fff;font-size:1rem}
+button:disabled{opacity:.5}
+progress{width:100%;height:14px;margin-top:8px}
+.msg{margin-top:8px;font-size:.9rem}
+.warn{color:#f5a623;font-size:.85rem}
+a{color:#7fb3ff}
+</style></head><body>
+<div class="card"><h3>🔄 فریمویر (firmware.bin)</h3>
+<input type="file" id="f-fw" accept=".bin">
+<button id="b-fw">آپلود و نصب</button>
+<progress id="p-fw" value="0" max="100" hidden></progress>
+<div class="msg" id="m-fw"></div></div>
+<div class="card"><h3>🗂 فایل‌های وب (spiffs.bin)</h3>
+<p class="warn">⚠️ با نصب این فایل، همه‌ی داده‌های روی فایل‌سیستم (از جمله پروفایل‌های سفارشی حالت یادگیری) پاک می‌شود.</p>
+<input type="file" id="f-fs" accept=".bin">
+<button id="b-fs">آپلود و نصب</button>
+<progress id="p-fs" value="0" max="100" hidden></progress>
+<div class="msg" id="m-fs"></div></div>
+<p><a href="/">← بازگشت</a></p>
+<script>
+function up(t){
+  var f=document.getElementById('f-'+t).files[0],
+      m=document.getElementById('m-'+t),
+      p=document.getElementById('p-'+t),
+      b=document.getElementById('b-'+t);
+  if(!f){m.textContent='اول یک فایل .bin انتخاب کنید';return;}
+  var x=new XMLHttpRequest(),fd=new FormData();
+  fd.append('file',f,f.name);
+  b.disabled=true;p.hidden=false;p.value=0;
+  m.textContent='در حال ارسال... برد را خاموش نکنید و صفحه را نبندید';
+  x.upload.onprogress=function(e){if(e.lengthComputable)p.value=e.loaded*100/e.total;};
+  x.onload=function(){
+    b.disabled=false;var r;
+    try{r=JSON.parse(x.responseText);}catch(e){r={ok:false,msg:'پاسخ نامعتبر ('+x.status+')'};}
+    m.textContent=(r.ok?'✅ ':'❌ ')+r.msg;
+  };
+  x.onerror=function(){b.disabled=false;m.textContent='❌ ارتباط قطع شد';};
+  x.open('POST','/update?type='+t);
+  x.send(fd);
+}
+document.getElementById('b-fw').onclick=function(){up('fw');};
+document.getElementById('b-fs').onclick=function(){up('fs');};
+</script></body></html>)rawliteral";
 
 // ======================== سازنده ========================
 
@@ -19,6 +75,12 @@ WebServerManager::WebServerManager()
     _started = false;
     _sessionToken = "";
     _sessionTokenIssuedAt = 0;
+    
+    _otaError = "";
+    _otaBytes = 0;
+    _otaIsFs = false;
+    _rebootPending = false;
+    _rebootAt = 0;
     
     _learnEngine = nullptr;
     _customStore = nullptr;
@@ -229,6 +291,20 @@ void WebServerManager::begin(uint16_t port) {
         }
         _handleAPIStatus(request);
     });
+    
+    // ===== OTA: به‌روزرسانی فریمویر / فایل‌سیستم از طریق مرورگر (پشت همان auth) =====
+    _server.on("/update", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!_authenticate(request)) return;
+        request->send(200, "text/html; charset=utf-8", OTA_PAGE_HTML);
+    });
+    _server.on("/update", HTTP_POST,
+        [this](AsyncWebServerRequest* request) {
+            _handleOtaFinished(request);
+        },
+        [this](AsyncWebServerRequest* request, const String& filename,
+               size_t index, uint8_t* data, size_t len, bool final) {
+            _handleOtaUpload(request, filename, index, data, len, final);
+        });
     
     // === جدید v2.0: مدیریت پروفایل‌های سفارشی (همه پشت همان auth) ===
     _registerCustomVehicleRoutes();
@@ -485,6 +561,104 @@ void WebServerManager::_registerCustomVehicleRoutes() {
 void WebServerManager::update() {
     // پاکسازی دوره‌ای کلاینت‌هایی که دیگر متصل نیستند اختیاری است؛
     // AsyncWebSocket خودش WS_EVT_DISCONNECT را صدا می‌زند و ما آنجا پاک می‌کنیم.
+    
+    // ریست بعد از OTA موفق (چند ثانیه صبر تا پاسخ HTTP به مرورگر برسد)
+    if (_rebootPending && (int32_t)(millis() - _rebootAt) >= 0) {
+        Serial.println("[OTA] ریست برای اعمال به‌روزرسانی...");
+        delay(100);
+        ESP.restart();
+    }
+}
+
+// ======================== OTA: دریافت فایل ========================
+
+void WebServerManager::_handleOtaUpload(AsyncWebServerRequest* request, const String& filename,
+                                        size_t index, uint8_t* data, size_t len, bool final) {
+    AppConfig* cfg = getConfig();
+    // بدون احراز هویت هیچ چیزی روی فلش نوشته نمی‌شود
+    // (پاسخ 401 در _handleOtaFinished ارسال می‌شود)
+    if (!request->authenticate(cfg->webUser, cfg->webPass)) return;
+    
+    if (index == 0) {
+        _otaError = "";
+        _otaBytes = 0;
+        _otaIsFs = request->hasParam("type") && request->getParam("type")->value() == "fs";
+        
+        String lower = filename;
+        lower.toLowerCase();
+        if (!lower.endsWith(".bin")) {
+            _otaError = "فایل باید با پسوند .bin باشد";
+            return;
+        }
+        // جلوگیری از اشتباه گرفتن فایل‌ها
+        bool looksBootloader = lower.indexOf("bootloader") >= 0 || lower.indexOf("partitions") >= 0;
+        if (_otaIsFs) {
+            if (looksBootloader || lower.indexOf("firmware") >= 0) {
+                _otaError = "این فایل مربوط به فایل‌سیستم نیست (spiffs.bin را انتخاب کنید)";
+                return;
+            }
+        } else {
+            if (looksBootloader || lower.indexOf("spiffs") >= 0) {
+                _otaError = "این فایل فریمویر نیست (firmware.bin را انتخاب کنید)";
+                return;
+            }
+        }
+        
+        if (Update.isRunning()) Update.abort();
+        if (_otaIsFs) SPIFFS.end();   // قبل از نوشتن روی پارتیشن فایل‌سیستم
+        
+        if (!Update.begin(UPDATE_SIZE_UNKNOWN, _otaIsFs ? U_SPIFFS : U_FLASH)) {
+            _otaError = String("شروع به‌روزرسانی ممکن نشد: ") + Update.errorString();
+            return;
+        }
+        Serial.printf("[OTA] شروع: %s (%s)\n", filename.c_str(), _otaIsFs ? "filesystem" : "firmware");
+    }
+    
+    if (_otaError.length() > 0) return;
+    
+    if (len > 0) {
+        if (Update.write(data, len) != len) {
+            _otaError = String("خطا در نوشتن: ") + Update.errorString();
+            Update.abort();
+            return;
+        }
+        _otaBytes += len;
+    }
+    
+    if (final) {
+        if (!Update.end(true)) {
+            _otaError = String("پایان به‌روزرسانی ناموفق: ") + Update.errorString();
+        } else {
+            Serial.printf("[OTA] پایان موفق: %u بایت\n", (unsigned)_otaBytes);
+        }
+    }
+}
+
+// ======================== OTA: پاسخ نهایی ========================
+
+void WebServerManager::_handleOtaFinished(AsyncWebServerRequest* request) {
+    if (!_authenticate(request)) return;
+    
+    bool ok = (_otaError.length() == 0 && _otaBytes > 0 && !Update.hasError());
+    
+    if (ok) {
+        _rebootPending = true;
+        _rebootAt = millis() + 2000;
+        request->send(200, "application/json",
+            "{\"ok\":true,\"msg\":\"نصب شد. برد تا چند ثانیه‌ی دیگر ریست می‌شود؛ بعد از حدود ۱۵ ثانیه دوباره به وای‌فای CarTouch وصل شوید.\"}");
+    } else {
+        String err = _otaError;
+        if (err.length() == 0) {
+            err = (_otaBytes == 0) ? "فایلی دریافت نشد" : "خطای نامشخص";
+        }
+        if (Update.isRunning()) Update.abort();
+        if (_otaIsFs) SPIFFS.begin(false);   // دوباره mount کن تا وب‌سرور از کار نیفتد
+        Serial.printf("[OTA] ناموفق: %s\n", err.c_str());
+        request->send(400, "application/json", "{\"ok\":false,\"msg\":\"" + err + "\"}");
+    }
+    
+    _otaError = "";
+    _otaBytes = 0;
 }
 
 // ======================== تنظیم callback ========================
