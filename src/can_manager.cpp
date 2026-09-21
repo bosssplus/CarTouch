@@ -223,7 +223,7 @@ bool CANManager::isActive() {
     twai_status_info_t status;
     twai_get_status_info(&status);
     return (status.state != TWAI_STATE_STOPPED && 
-            status.state != TWAI_STATE_OFF);
+            status.state != TWAI_STATE_BUS_OFF);
 }
 
 // ======================== آخرین خطا ========================
