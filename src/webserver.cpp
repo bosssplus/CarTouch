@@ -817,10 +817,10 @@ void WebServerManager::broadcastVehicleData(const VehicleData& data) {
     
     String json = _vehicleDataToJSON(data);
     
-    for (AsyncWebSocketClient* client : _ws.getClients()) {
-        WsClientAuth* auth = _findClientAuth(client->id());
+    for (AsyncWebSocketClient& client : _ws.getClients()) {
+        WsClientAuth* auth = _findClientAuth(client.id());
         if (auth && auth->authenticated) {
-            client->text(json);
+            client.text(json);
         }
     }
 }
@@ -834,10 +834,10 @@ void WebServerManager::broadcastStatus(const char* status) {
     msg += status;
     msg += "\"}";
     
-    for (AsyncWebSocketClient* client : _ws.getClients()) {
-        WsClientAuth* auth = _findClientAuth(client->id());
+    for (AsyncWebSocketClient& client : _ws.getClients()) {
+        WsClientAuth* auth = _findClientAuth(client.id());
         if (auth && auth->authenticated) {
-            client->text(msg);
+            client.text(msg);
         }
     }
 }
