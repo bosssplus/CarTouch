@@ -184,13 +184,17 @@ void WebServerManager::begin(uint16_t port) {
     // ===== Routes (v1.0 - بدون تغییر) =====
     
     _server.on("/", HTTP_GET, [this](AsyncWebServerRequest* request) {
-        if (!_authenticate(request)) {
-            AsyncWebServerResponse* response = request->beginResponse(401, "text/html", 
-                "<html><body><h3>غیرمجاز</h3>"
-                "<form method='POST' action='/login'>"
-                "کاربر: <input name='user'><br>"
-                "رمز: <input name='pass' type='password'><br>"
-                "<input type='submit' value='ورود'></form></body></html>");
+        // اصلاح: قبلاً _authenticate() خودش یک پاسخ 401 می‌فرستاد و بعد پاسخ دومِ
+        // این صفحه هم فرستاده می‌شد؛ پاسخ دوم هدر WWW-Authenticate نداشت، پس مرورگر
+        // پنجره‌ی رمز را نشان نمی‌داد و کاربر در صفحه‌ی ورودِ بی‌اثر گیر می‌کرد.
+        // حالا فقط یک پاسخ فرستاده می‌شود: هم بدنه‌ی خوانا، هم درخواست رمز مرورگر.
+        AppConfig* authCfg = getConfig();
+        if (!request->authenticate(authCfg->webUser, authCfg->webPass)) {
+            AsyncWebServerResponse* response = request->beginResponse(401, "text/html; charset=utf-8", 
+                "<html><head><meta charset='utf-8'></head><body dir='rtl'><h3>غیرمجاز</h3>"
+                "<p>نام کاربری و رمز را در پنجره‌ی مرورگر وارد کنید. اگر پنجره‌ای نیامد، صفحه را دوباره باز کنید.</p>"
+                "</body></html>");
+            response->addHeader("WWW-Authenticate", "Basic realm=\"CarTouch\"");
             request->send(response);
             return;
         }
@@ -203,9 +207,9 @@ void WebServerManager::begin(uint16_t port) {
         
         AsyncWebServerResponse* response;
         if (SPIFFS.exists("/index.html")) {
-            response = request->beginResponse(SPIFFS, "/index.html", "text/html");
+            response = request->beginResponse(SPIFFS, "/index.html", "text/html; charset=utf-8");
         } else {
-            response = request->beginResponse(200, "text/html", 
+            response = request->beginResponse(200, "text/html; charset=utf-8", 
                 "<h1>CarTouch</h1><p>فایل index.html یافت نشد.</p>");
         }
         response->addHeader("Set-Cookie", "cartouch_session=" + _sessionToken + "; Path=/; HttpOnly");
@@ -227,7 +231,7 @@ void WebServerManager::begin(uint16_t port) {
             request->send(response);
         } else {
             Serial.println("⚠️ [WEB] تلاش لاگین ناموفق");
-            request->send(401, "text/html", "<html><body><h3>نام کاربری یا رمز اشتباه است</h3><a href='/'>بازگشت</a></body></html>");
+            request->send(401, "text/html; charset=utf-8", "<html><head><meta charset='utf-8'></head><body dir='rtl'><h3>نام کاربری یا رمز اشتباه است</h3><a href='/'>بازگشت</a></body></html>");
         }
     });
     
