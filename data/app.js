@@ -295,6 +295,11 @@ async function checkPasswordStatus() {
         if (warningGroup) {
             warningGroup.style.display = data.usingDefaultPassword ? 'block' : 'none';
         }
+        // بنر خودروی فعال هم از همین پاسخ رفرش می‌شود
+        const banner = document.getElementById('active-vehicle-banner');
+        if (banner && data.activeVehicle) {
+            banner.textContent = 'خودروی فعال: ' + data.activeVehicle;
+        }
     } catch (e) {
         console.warn('خطا در بررسی وضعیت رمز:', e);
     }
