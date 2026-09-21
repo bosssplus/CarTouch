@@ -1,0 +1,424 @@
+/* CarTouch - Web Dashboard Style */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+#app {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 10px;
+    min-height: 100vh;
+}
+
+/* هدر */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #333;
+    margin-bottom: 10px;
+}
+
+header h1 {
+    font-size: 1.4rem;
+    color: #00d4ff;
+}
+
+#connection-status {
+    font-size: 0.8rem;
+    padding: 4px 10px;
+    border-radius: 12px;
+    background: #e74c3c;
+    color: #fff;
+}
+
+#connection-status.connected {
+    background: #2ecc71;
+}
+
+/* تب‌ها */
+#tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 12px 5px;
+    border: none;
+    background: #16213e;
+    color: #888;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.tab-btn.active {
+    background: #0f3460;
+    color: #00d4ff;
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* گرید کنترل */
+.control-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    padding: 5px;
+}
+
+.ctrl-btn {
+    padding: 20px 10px;
+    border: none;
+    background: #16213e;
+    color: #eee;
+    font-size: 1.1rem;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    min-height: 70px;
+}
+
+.ctrl-btn:active {
+    transform: scale(0.95);
+    background: #0f3460;
+}
+
+.ctrl-btn.lock {
+    border-right: 3px solid #e74c3c;
+}
+
+.ctrl-btn.unlock {
+    border-right: 3px solid #2ecc71;
+}
+
+/* داشبورد */
+#speed-display {
+    font-size: 3.5rem;
+    font-weight: bold;
+    text-align: center;
+    padding: 20px;
+    color: #00d4ff;
+    text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+}
+
+#speed-display small {
+    font-size: 1rem;
+    color: #888;
+}
+
+.dash-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.dash-item {
+    background: #16213e;
+    padding: 15px;
+    border-radius: 12px;
+    text-align: center;
+}
+
+.dash-label {
+    display: block;
+    font-size: 0.8rem;
+    color: #888;
+    margin-bottom: 5px;
+}
+
+.dash-value {
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: #eee;
+}
+
+/* تنظیمات */
+.settings-group {
+    background: #16213e;
+    padding: 15px;
+    border-radius: 12px;
+    margin-bottom: 10px;
+}
+
+.settings-group h3 {
+    color: #00d4ff;
+    margin-bottom: 8px;
+    font-size: 1rem;
+}
+
+.settings-group p {
+    color: #aaa;
+    font-size: 0.9rem;
+    margin: 3px 0;
+}
+
+/* نوتیفیکیشن */
+#notification {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 25px;
+    font-size: 0.9rem;
+    opacity: 0;
+    transition: opacity 0.3s;
+    max-width: 90%;
+    text-align: center;
+    z-index: 100;
+}
+
+#notification.show {
+    opacity: 1;
+}
+
+/* ریسپانسیو */
+@media (max-width: 360px) {
+    .ctrl-btn {
+        padding: 15px 8px;
+        font-size: 1rem;
+        min-height: 60px;
+    }
+    #speed-display {
+        font-size: 2.5rem;
+    }
+}
+
+/* ======================== جدید v2.0: تب یادگیری و مودال‌ها ======================== */
+
+.active-vehicle-banner {
+    background: #16213e;
+    padding: 10px 14px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    color: #00d4ff;
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.learn-select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background: #0f1a30;
+    color: #eee;
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+}
+
+.text-input {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    background: #0f1a30;
+    color: #eee;
+    font-size: 0.95rem;
+    box-sizing: border-box;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0;
+    color: #ccc;
+    font-size: 0.9rem;
+}
+
+.error-text {
+    color: #e74c3c;
+    font-size: 0.85rem;
+    margin-top: 6px;
+    min-height: 1.2em;
+}
+
+.profile-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.profile-item {
+    background: #0f1a30;
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.profile-item .profile-name {
+    font-weight: bold;
+}
+
+.profile-item .profile-meta {
+    color: #888;
+    font-size: 0.8rem;
+}
+
+.profile-item-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.profile-item-actions button {
+    background: #16213e;
+    border: none;
+    color: #00d4ff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.command-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    background: #0f1a30;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    font-size: 0.85rem;
+}
+
+.command-status-verified {
+    color: #2ecc71;
+}
+
+.command-status-unverified {
+    color: #f39c12;
+}
+
+.command-verify-btn {
+    background: #e74c3c;
+    color: #fff;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+/* ===== مودال‌های تمام‌صفحه (ویزارد یادگیری / ورود دستی / تأیید) ===== */
+
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 20px;
+}
+
+.modal-overlay.hidden {
+    display: none;
+}
+
+.modal-box {
+    background: #16213e;
+    border-radius: 16px;
+    padding: 20px;
+    max-width: 420px;
+    width: 100%;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+}
+
+.modal-box.verify-box {
+    border: 2px solid #e74c3c;
+}
+
+.wizard-status-text {
+    color: #ccc;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    margin: 10px 0;
+    white-space: pre-line;
+}
+
+.progress-bar-container {
+    width: 100%;
+    height: 14px;
+    background: #0f1a30;
+    border-radius: 7px;
+    overflow: hidden;
+    margin: 10px 0;
+}
+
+.progress-bar-container.hidden {
+    display: none;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00d4ff, #2ecc71);
+    width: 0%;
+    transition: width 0.2s;
+}
+
+.candidate-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 10px 0;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.candidate-list.hidden {
+    display: none;
+}
+
+.candidate-item {
+    background: #0f1a30;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    padding: 10px;
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 0.85rem;
+}
+
+.candidate-item.selected {
+    border-color: #2ecc71;
+    background: #0f2a1a;
+}
+
+.candidate-item .candidate-tag {
+    color: #888;
+    font-size: 0.75rem;
+}

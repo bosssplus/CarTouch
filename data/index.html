@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CarTouch - کنترل خودرو</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- هدر -->
+        <header>
+            <h1>🚗 CarTouch</h1>
+            <span id="connection-status">قطع</span>
+        </header>
+        
+        <!-- تب‌ها (تب چهارم "یادگیری" جدید در v2.0) -->
+        <div id="tabs">
+            <button class="tab-btn active" data-tab="control">🎮 کنترل</button>
+            <button class="tab-btn" data-tab="dashboard">📊 داشبورد</button>
+            <button class="tab-btn" data-tab="learn">🎓 یادگیری</button>
+            <button class="tab-btn" data-tab="settings">⚙ تنظیمات</button>
+        </div>
+        
+        <!-- تب کنترل (v1.0 - بدون تغییر) -->
+        <div id="tab-control" class="tab-content active">
+            <p id="active-vehicle-banner" class="active-vehicle-banner">خودروی فعال: —</p>
+            <div class="control-grid">
+                <button class="ctrl-btn lock" data-cmd="lock">🔒 قفل</button>
+                <button class="ctrl-btn unlock" data-cmd="unlock">🔓 باز</button>
+                <button class="ctrl-btn" data-cmd="windows_up">⬆ شیشه بالا</button>
+                <button class="ctrl-btn" data-cmd="windows_down">⬇ شیشه پایین</button>
+                <button class="ctrl-btn" data-cmd="sunroof">☀ سانروف</button>
+                <button class="ctrl-btn" data-cmd="trunk">🔙 صندوق</button>
+                <button class="ctrl-btn" data-cmd="mirror">🪞 آینه</button>
+                <button class="ctrl-btn" data-cmd="alarm">🚨 دزدگیر</button>
+            </div>
+        </div>
+        
+        <!-- تب داشبورد (v1.0 - بدون تغییر) -->
+        <div id="tab-dashboard" class="tab-content">
+            <div id="speed-display">0 <small>km/h</small></div>
+            <div class="dash-grid">
+                <div class="dash-item">
+                    <span class="dash-label">RPM</span>
+                    <span class="dash-value" id="dash-rpm">0</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">🌡 دما</span>
+                    <span class="dash-value" id="dash-temp">-- °C</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">🔋 ولتاژ</span>
+                    <span class="dash-value" id="dash-battery">-- V</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">⛽ سوخت</span>
+                    <span class="dash-value" id="dash-fuel">--%</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- === تب یادگیری (جدید v2.0) === -->
+        <div id="tab-learn" class="tab-content">
+            <div class="settings-group">
+                <h3>🎓 یادگیری فرمان از خودروی واقعی</h3>
+                <p style="color:#aaa; font-size:0.85rem;">
+                    یک‌بار کنار خودرو باشید، دکمه‌های واقعی خودرو را بزنید و
+                    دستگاه پیام‌های CAN مربوطه را یاد می‌گیرد. در ابتدا فقط
+                    شنود می‌کند - هیچ فرمانی ارسال نمی‌شود.
+                </p>
+            </div>
+            
+            <div class="settings-group">
+                <h3>پروفایل‌های خودروی من</h3>
+                <select id="learn-active-profile-select" class="learn-select"></select>
+                <div id="learn-profile-list" class="profile-list"></div>
+                <button class="ctrl-btn" id="btn-new-profile" style="width:100%; min-height:45px; margin-top:8px;">
+                    ➕ ساخت پروفایل جدید
+                </button>
+            </div>
+            
+            <div class="settings-group">
+                <h3>شروع یادگیری</h3>
+                <select id="learn-label-select" class="learn-select"></select>
+                <button class="ctrl-btn" id="btn-learn-start" style="width:100%; min-height:45px; margin-top:8px;">
+                    ▶ شروع فرآیند یادگیری
+                </button>
+                <button class="ctrl-btn" id="btn-manual-entry-open" style="width:100%; min-height:45px; margin-top:8px; background:#3498db;">
+                    ✍️ ورود دستی CAN ID / بایت‌ها
+                </button>
+            </div>
+            
+            <div class="settings-group">
+                <h3>پشتیبان‌گیری پروفایل</h3>
+                <p style="color:#aaa; font-size:0.85rem;">
+                    می‌توانید یک پروفایل را دانلود یا از فایل دیگری وارد کنید.
+                    فرمان‌های وارد‌شده همیشه به‌صورت «تأییدنشده» علامت
+                    می‌خورند تا روی این دستگاه/خودرو دوباره تست شوند.
+                </p>
+                <button class="ctrl-btn" id="btn-export-profile" style="width:100%; min-height:40px;">⬇ دانلود پروفایل انتخاب‌شده</button>
+                <input type="file" id="import-file-input" accept="application/json" style="display:none;">
+                <button class="ctrl-btn" id="btn-import-profile" style="width:100%; min-height:40px; margin-top:8px;">⬆ وارد کردن از فایل</button>
+            </div>
+        </div>
+        
+        <!-- === مودال ویزارد یادگیری (جدید v2.0) === -->
+        <div id="learn-wizard-modal" class="modal-overlay hidden">
+            <div class="modal-box">
+                <h3>🎓 در حال یادگیری: <span id="learn-wizard-label-name">-</span></h3>
+                <p id="learn-wizard-status" class="wizard-status-text">...</p>
+                <div class="progress-bar-container hidden" id="learn-wizard-progress-container">
+                    <div class="progress-bar-fill" id="learn-wizard-progress-fill"></div>
+                </div>
+                <div id="learn-wizard-candidates" class="candidate-list hidden"></div>
+                <button class="ctrl-btn" id="btn-wizard-action" style="width:100%; min-height:45px; margin-top:12px;">▶ شروع</button>
+                <button class="ctrl-btn" id="btn-wizard-cancel" style="width:100%; min-height:40px; margin-top:8px; background:#555;">❌ انصراف</button>
+            </div>
+        </div>
+        
+        <!-- === مودال ورود دستی (جدید v2.0) === -->
+        <div id="manual-entry-modal" class="modal-overlay hidden">
+            <div class="modal-box">
+                <h3>✍️ ورود دستی فرمان</h3>
+                <p style="margin-bottom:6px;">فرمان:</p>
+                <select id="manual-label-select" class="learn-select"></select>
+                <p style="margin:10px 0 6px;">CAN ID (hex، مثلاً 1A0):</p>
+                <input type="text" id="manual-can-id" class="text-input" placeholder="1A0">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="manual-extended"> شناسه گسترده (29-bit Extended)
+                </label>
+                <p style="margin:10px 0 6px;">بایت‌های داده (hex، با فاصله):</p>
+                <input type="text" id="manual-data-hex" class="text-input" placeholder="01 FF 00 00">
+                <p id="manual-entry-error" class="error-text"></p>
+                <button class="ctrl-btn" id="btn-manual-save" style="width:100%; min-height:45px; margin-top:10px;">✅ ذخیره</button>
+                <button class="ctrl-btn" id="btn-manual-cancel" style="width:100%; min-height:40px; margin-top:8px; background:#555;">❌ انصراف</button>
+            </div>
+        </div>
+        
+        <!-- === مودال تأیید فرمان (جدید v2.0) - قرمز/هشداردهنده === -->
+        <div id="verify-modal" class="modal-overlay hidden">
+            <div class="modal-box verify-box">
+                <h3 style="color:#e74c3c;">⚠️ تأیید فرمان تست‌نشده</h3>
+                <p id="verify-info-text" class="wizard-status-text">...</p>
+                <button class="ctrl-btn" id="btn-verify-send" style="width:100%; min-height:45px; margin-top:10px; background:#e74c3c;">
+                    🚨 ارسال آزمایشی یک‌بار
+                </button>
+                <p id="verify-result-text" class="wizard-status-text"></p>
+                <div style="display:flex; gap:8px; margin-top:8px;">
+                    <button class="ctrl-btn" id="btn-verify-success" style="flex:1; min-height:40px; background:#2ecc71;">✅ درست کار کرد</button>
+                    <button class="ctrl-btn" id="btn-verify-fail" style="flex:1; min-height:40px; background:#555;">❌ کار نکرد</button>
+                </div>
+                <button class="ctrl-btn" id="btn-verify-close" style="width:100%; min-height:40px; margin-top:8px; background:#333;">بستن</button>
+            </div>
+        </div>
+        
+        <!-- تب تنظیمات (v1.0 - بدون تغییر) -->
+        <div id="tab-settings" class="tab-content">
+            <div class="settings-group" id="password-warning-group" style="display:none; border: 2px solid #e74c3c;">
+                <h3 style="color:#e74c3c;">⚠️ رمز پیش‌فرض هنوز فعال است</h3>
+                <p>برای امنیت دستگاه، لطفاً همین الان رمز را تغییر دهید.</p>
+            </div>
+            <div class="settings-group">
+                <h3>🔐 تغییر رمز ورود</h3>
+                <form id="password-form">
+                    <p style="margin-bottom:6px;">نام کاربری جدید (اختیاری):</p>
+                    <input type="text" id="new-user" placeholder="خالی = بدون تغییر" style="width:100%; padding:8px; margin-bottom:8px; border-radius:6px; border:1px solid #444; background:#0f1a30; color:#eee;">
+                    <p style="margin-bottom:6px;">رمز جدید (حداقل ۸ کاراکتر):</p>
+                    <input type="password" id="new-pass" required minlength="8" style="width:100%; padding:8px; margin-bottom:8px; border-radius:6px; border:1px solid #444; background:#0f1a30; color:#eee;">
+                    <p style="margin-bottom:6px;">تکرار رمز جدید:</p>
+                    <input type="password" id="confirm-pass" required minlength="8" style="width:100%; padding:8px; margin-bottom:10px; border-radius:6px; border:1px solid #444; background:#0f1a30; color:#eee;">
+                    <button type="submit" class="ctrl-btn" style="width:100%; min-height:45px;">ذخیره رمز جدید</button>
+                    <p id="password-form-msg" style="margin-top:8px; font-size:0.85rem;"></p>
+                </form>
+            </div>
+            <div class="settings-group">
+                <h3>WiFi</h3>
+                <p id="wifi-info">حالت: Access Point</p>
+                <p id="wifi-ip">IP: 192.168.4.1</p>
+            </div>
+            <div class="settings-group">
+                <h3>CAN Bus</h3>
+                <p id="can-info">وضعیت: ---</p>
+            </div>
+            <div class="settings-group">
+                <h3>درباره</h3>
+                <p>CarTouch v2.0</p>
+                <p>ESP32-S3 + CAN Bus + Learn Mode</p>
+            </div>
+        </div>
+        
+        <!-- نوتیفیکیشن -->
+        <div id="notification"></div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
