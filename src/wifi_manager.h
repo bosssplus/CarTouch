@@ -16,11 +16,15 @@
 #include "config.h"
 
 // وضعیت‌های WiFi
+// نکته: از پیشوند CT_ استفاده شده چون WIFI_AP و WIFI_STA در هسته‌ی
+// ESP32 Arduino از قبل به صورت ماکرو برای WIFI_MODE_AP / WIFI_MODE_STA
+// تعریف شده‌اند و هم‌نام‌سازی باعث خطای "conflicts with a previous
+// declaration" در کامپایل می‌شد.
 enum WiFiState : uint8_t {
-    WIFI_DISABLED = 0,
-    WIFI_AP       = 1,     // Access Point mode
-    WIFI_STA      = 2,     // Station mode (connected to router)
-    WIFI_STA_FAIL = 3      // Station mode failed to connect
+    CT_WIFI_DISABLED = 0,
+    CT_WIFI_AP       = 1,     // Access Point mode
+    CT_WIFI_STA      = 2,     // Station mode (connected to router)
+    CT_WIFI_STA_FAIL = 3      // Station mode failed to connect
 };
 
 /**

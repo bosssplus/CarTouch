@@ -9,7 +9,7 @@
 // ======================== سازنده ========================
 
 WiFiManager::WiFiManager() {
-    _state = WIFI_DISABLED;
+    _state = CT_WIFI_DISABLED;
     _enabled = true;
 }
 
@@ -18,7 +18,7 @@ WiFiManager::WiFiManager() {
 void WiFiManager::begin(uint8_t mode) {
     if (!_enabled) {
         Serial.println("[WiFi] WiFi غیرفعال است");
-        _state = WIFI_DISABLED;
+        _state = CT_WIFI_DISABLED;
         return;
     }
     
@@ -27,7 +27,7 @@ void WiFiManager::begin(uint8_t mode) {
     switch (mode) {
         case 0:
             WiFi.mode(WIFI_OFF);
-            _state = WIFI_DISABLED;
+            _state = CT_WIFI_DISABLED;
             Serial.println("[WiFi] WiFi خاموش شد");
             break;
             
@@ -54,12 +54,12 @@ void WiFiManager::_startAP() {
     bool result = WiFi.softAP(WIFI_AP_NAME, WIFI_AP_PASSWORD);
     
     if (result) {
-        _state = WIFI_AP;
+        _state = CT_WIFI_AP;
         Serial.printf("[WiFi] Access Point: %s | IP: %s\n", 
                       WIFI_AP_NAME, WiFi.softAPIP().toString().c_str());
         Serial.printf("[WiFi] رمز: %s\n", WIFI_AP_PASSWORD);
     } else {
-        _state = WIFI_DISABLED;
+        _state = CT_WIFI_DISABLED;
         Serial.println("⚠️ [WiFi] خطا در ایجاد Access Point");
     }
 }
@@ -90,10 +90,10 @@ void WiFiManager::_startSTA() {
     }
     
     if (WiFi.status() == WL_CONNECTED) {
-        _state = WIFI_STA;
+        _state = CT_WIFI_STA;
         Serial.printf("\n[WiFi] متصل شد! IP: %s\n", WiFi.localIP().toString().c_str());
     } else {
-        _state = WIFI_STA_FAIL;
+        _state = CT_WIFI_STA_FAIL;
         Serial.println("\n⚠️ [WiFi] اتصال ناموفق - استفاده از AP");
         _startAP();
     }
@@ -104,7 +104,7 @@ void WiFiManager::_startSTA() {
 void WiFiManager::disconnect() {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
-    _state = WIFI_DISABLED;
+    _state = CT_WIFI_DISABLED;
     Serial.println("[WiFi] WiFi قطع شد");
 }
 
@@ -157,13 +157,13 @@ bool WiFiManager::connectToNetwork(const char* ssid, const char* password) {
     }
     
     if (WiFi.status() == WL_CONNECTED) {
-        _state = WIFI_STA;
+        _state = CT_WIFI_STA;
         Serial.printf("[WiFi] به %s متصل شد. IP: %s\n", ssid, WiFi.localIP().toString().c_str());
         return true;
     }
     
     Serial.printf("⚠️ [WiFi] اتصال به %s ناموفق\n", ssid);
-    _state = WIFI_STA_FAIL;
+    _state = CT_WIFI_STA_FAIL;
     return false;
 }
 
@@ -176,9 +176,9 @@ WiFiState WiFiManager::getState() {
 // ======================== IP ========================
 
 IPAddress WiFiManager::getIP() {
-    if (_state == WIFI_AP) {
+    if (_state == CT_WIFI_AP) {
         return WiFi.softAPIP();
-    } else if (_state == WIFI_STA) {
+    } else if (_state == CT_WIFI_STA) {
         return WiFi.localIP();
     }
     return IPAddress(0, 0, 0, 0);
@@ -187,8 +187,8 @@ IPAddress WiFiManager::getIP() {
 // ======================== بررسی اتصال ========================
 
 bool WiFiManager::isConnected() {
-    return (_state == WIFI_STA && WiFi.status() == WL_CONNECTED) ||
-           (_state == WIFI_AP);
+    return (_state == CT_WIFI_STA && WiFi.status() == WL_CONNECTED) ||
+           (_state == CT_WIFI_AP);
 }
 
 // ======================== روشن بودن ========================
