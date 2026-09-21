@@ -1,0 +1,60 @@
+name: Build Firmware
+
+# اجرا: با هر push و Pull Request (روی همه برنچ‌ها)، و امکان اجرای دستی از تب Actions
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (esp32-s3-devkitc-1)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # کش کردن کل دایرکتوری PlatformIO (پکیج‌ها/پلتفرم‌ها) برای سرعت بیشتر در اجراهای بعدی
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+
+      # 1) کامپایل فریمویر - مرحله اصلی تست/اعتبارسنجی
+      #    اگه کد خطای کامپایل داشته باشه، اینجا fail میشه
+      - name: Build firmware
+        run: pio run -e esp32-s3-devkitc-1
+
+      # 2) ساخت ایمیج فایل‌سیستم از پوشه data/ (index.html, app.js, style.css, dbc/*)
+      #    بدون این مرحله spiffs.bin ساخته نمیشه و webserver نمی‌تونه فایل‌های وب رو سرو کنه
+      - name: Build filesystem image (SPIFFS)
+        run: pio run -e esp32-s3-devkitc-1 -t buildfs
+
+      # 3) تحلیل استاتیک - فقط اطلاع‌رسانی، بیلد رو fail نمی‌کنه
+      - name: Static analysis
+        run: pio check -e esp32-s3-devkitc-1 --skip-packages
+        continue-on-error: true
+
+      # 4) آپلود فایل‌های نهایی فلش به‌عنوان Artifact
+      #    شامل: firmware.bin, bootloader.bin, partitions.bin, spiffs.bin
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cartouch-firmware
+          path: .pio/build/esp32-s3-devkitc-1/*.bin
+          if-no-files-found: error
+          retention-days: 30
