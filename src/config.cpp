@@ -14,13 +14,6 @@
 static AppConfig currentConfig;
 static bool configLoaded = false;
 
-// === جدید (چک‌لیست تجاری #20) ===
-static PasswordChangeCallback _passwordChangeCallback = nullptr;
-
-void registerPasswordChangeCallback(PasswordChangeCallback cb) {
-    _passwordChangeCallback = cb;
-}
-
 /**
  * بارگذاری تنظیمات از حافظه NVS
  * 
@@ -149,17 +142,7 @@ bool setWebPassword(const char* newUser, const char* newPass) {
     cfg->webPass[sizeof(cfg->webPass) - 1] = '\0';
     cfg->forcePasswordChange = false;
     
-    bool saved = saveConfig();
-
-    // === جدید (چک‌لیست تجاری #20) ===
-    // صرف‌نظر از این‌که setWebPassword از کجا صدا زده شده (TFT یا
-    // خود وب)، اگر ذخیره موفق بود، هر ماژولی که session نگه می‌دارد
-    // (WebServerManager) خبردار می‌شود تا session قدیمی را باطل کند.
-    if (saved && _passwordChangeCallback) {
-        _passwordChangeCallback();
-    }
-
-    return saved;
+    return saveConfig();
 }
 
 /**
@@ -183,8 +166,5 @@ void setDefaultConfig() {
     cfg->canSpeed = CAN_SPEED;
     cfg->listenOnlyMode = true;   // پیش‌فرض ایمن: فقط شنود
     cfg->sleepTimeout = AUTO_SLEEP_TIMEOUT;
-    // === جدید (چک‌لیست تجاری #9) ===
-    cfg->touchCalibrated = false;
-    memset(cfg->touchCalData, 0, sizeof(cfg->touchCalData));
     saveConfig();
 }

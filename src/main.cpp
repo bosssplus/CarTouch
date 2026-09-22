@@ -19,8 +19,6 @@
 
 #include <Arduino.h>
 #include <SPIFFS.h>
-#include <esp_task_wdt.h>
-#include <esp_attr.h>   // برای EXT_RAM_BSS_ATTR (قرار دادن vehicleDB در PSRAM)
 
 #include "config.h"
 #include "can_manager.h"
@@ -44,22 +42,8 @@ CANManager canManager(PIN_CAN_TX, PIN_CAN_RX, CAN_SPEED);
 // OBD-II
 OBD2Reader obd2Reader(canManager);
 
-// پایگاه داده خودرو (DBC)
-// === اصلاحیه (چک‌لیست تجاری #7/#8) ===
-// با افزایش MAX_DBC_MESSAGES به ۱۵۰ (به config.h/vehicle_db.h مراجعه
-// کنید)، حجم آرایه‌ی داخلی این آبجکت حدود ۴۶۰ کیلوبایت است که تقریباً
-// کل SRAM داخلی ESP32-S3 (~512KB) را می‌بلعد و برای WiFi/LVGL/استک‌ها
-// چیزی باقی نمی‌گذارد. EXT_RAM_BSS_ATTR این آبجکت را به PSRAM
-// (ESP32-S3-WROOM-1-N16R8 دارای ۸ مگابایت PSRAM است، که در
-// platformio.ini با board_build.psram=enable فعال شده) منتقل می‌کند.
-// ⚠️ نکته‌ی صادقانه: EXT_RAM_BSS_ATTR روی Arduino-ESP32/ESP-IDF یک
-// ماکروی رسمی و مستند است، ولی این تغییر روی سخت‌افزار واقعی تست
-// نشده. قبل از فلش نهایی، حتماً از طریق Serial Monitor مقدار
-// ESP.getFreePsram() و ESP.getFreeHeap() را قبل/بعد این تغییر مقایسه
-// کنید تا مطمئن شوید آبجکت واقعاً در PSRAM نشسته و نه اینکه لینکر
-// بی‌صدا آن را در DRAM گذاشته (در تنظیمات نادرست PSRAM چنین چیزی
-// ممکن است رخ دهد).
-EXT_RAM_BSS_ATTR VehicleDB vehicleDB;
+// پایگاه داده خودرو (DBC - v1.0، بدون تغییر)
+VehicleDB vehicleDB;
 
 // === جدید v2.0: ذخیره‌سازی پروفایل‌های سفارشی + موتور یادگیری ===
 CustomVehicleStore customVehicleStore;
@@ -86,14 +70,6 @@ uint32_t lastActivityTime = 0;
 uint32_t obdReadInterval = 200;  // هر ۲۰۰ میلی‌ثانیه یکبار OBD بخوان
 DeviceMode currentMode = MODE_ACTIVE;
 
-// === جدید (چک‌لیست تجاری #2): Task Watchdog Timer ===
-// اگر loop() به هر دلیلی (مثلاً readAllPIDs که هنوز blocking است - نگاه
-// کنید به یادداشت obd2_reader.h) بیش از WDT_TIMEOUT_S گیر کند، ESP32
-// به‌جای هنگ کردن نامحدود، ری‌ست می‌شود. این جایگزین بازطراحی
-// non-blocking نیست (که همچنان لازم است) ولی از "قفل کامل و دائمی
-// دستگاه در ماشین" جلوگیری می‌کند.
-#define WDT_TIMEOUT_S 8
-
 // ======================== پروتوتایپ توابع ========================
 
 void setup();
@@ -113,21 +89,6 @@ void setup() {
     Serial.println(" CarTouch v2.0 - ESP32-S3 Car Control");
     Serial.println(" (+ Learn Mode / Custom Vehicle Database)");
     Serial.println("========================================\n");
-
-    // 0. === جدید: راه‌اندازی Task Watchdog ===
-    // باید خیلی زود در setup() باشد تا حتی هنگ در همین تابع هم پوشش
-    // داده شود. esp_task_wdt_add بدون آرگومان، تسک جاری (loopTask
-    // آردوینو) را ثبت می‌کند.
-    {
-        esp_task_wdt_config_t wdtConfig = {
-            .timeout_ms = WDT_TIMEOUT_S * 1000,
-            .idle_core_mask = 0,
-            .trigger_panic = true
-        };
-        esp_task_wdt_init(&wdtConfig);
-        esp_task_wdt_add(NULL);
-        Serial.printf("[INIT] Watchdog فعال شد (timeout: %ds)\n", WDT_TIMEOUT_S);
-    }
     
     // 1. بارگذاری تنظیمات
     Serial.println("[INIT] بارگذاری تنظیمات...");
@@ -215,13 +176,6 @@ void setup() {
 // ======================== حلقه اصلی ========================
 
 void loop() {
-    // 0. === جدید: تغذیه‌ی Watchdog ===
-    // باید هر تکرار loop صدا زده شود. اگر مرحله‌ای پایین‌تر بیش از
-    // WDT_TIMEOUT_S طول بکشد (گیر کردن OBD2Reader، بی‌نهایت‌حلقه‌ی
-    // ناخواسته و...)، این فراخوانی اجرا نمی‌شود و تراشه خودش را
-    // ری‌ست می‌کند تا دستگاه کاملاً هنگ نماند.
-    esp_task_wdt_reset();
-
     // 1. به‌روزرسانی LVGL
     tftUI.update();
     
@@ -233,26 +187,12 @@ void loop() {
     // capture با تایمینگ درست پیش برود (شبیه tftUI.update()).
     learnEngine.update();
     
-    // 4. خواندن داده‌های OBD-II (دوره‌ای، اکنون کاملاً non-blocking)
+    // 4. خواندن داده‌های OBD-II (دوره‌ای)
     // در حالت Listen-Only هیچ درخواست OBD ارسال نمی‌شود (خواندن OBD نیازمند ارسال درخواست است)
-    // === تغییر (چک‌لیست تجاری #4) ===
-    // قبلاً اینجا updateVehicleData() به‌صورت مستقیم و مسدودکننده صدا
-    // زده می‌شد (تا ~۱٫۲ ثانیه در بدترین حالت). اکنون obd2Reader.update()
-    // در هر تکرار loop() فقط یک قدم کوچک جلو می‌رود و هرگز مسدود
-    // نمی‌کند؛ نتیجه‌ی یک دور کامل را جداگانه (در ادامه‌ی همین بلوک)
-    // با getLatestData() برمی‌داریم.
-    if (currentMode == MODE_ACTIVE && !getConfig()->listenOnlyMode) {
-        obd2Reader.update();
-
-        if (millis() - lastDataUpdateTime > obdReadInterval) {
-            if (obd2Reader.getLatestData(currentVehicleData)) {
-                // توجه: خواندن ولتاژ باطری از طریق CAN در بسیاری از خودروها پشتیبانی نمی‌شود
-                currentVehicleData.batteryVoltage = 12.6f;  // مقدار پیش‌فرض
-                tftUI.updateVehicleData(currentVehicleData);
-                webServer.broadcastVehicleData(currentVehicleData);
-            }
-            lastDataUpdateTime = millis();
-        }
+    if (currentMode == MODE_ACTIVE && !getConfig()->listenOnlyMode &&
+        millis() - lastDataUpdateTime > obdReadInterval) {
+        updateVehicleData();
+        lastDataUpdateTime = millis();
     }
     
     // 5. بررسی خواب خودکار
@@ -277,13 +217,9 @@ void loop() {
 }
 
 // ======================== به‌روزرسانی داده‌های خودرو ========================
-// توجه: این تابع دیگر در loop() صدا زده نمی‌شود - منطقش مستقیماً در
-// بلوک ۴ داخل loop() با obd2Reader.update()/getLatestData() غیرمسدودکننده
-// جایگزین شده (چک‌لیست تجاری #4). فقط پروتوتایپ/امضا برای سازگاری با
-// کدی که شاید هنوز صدایش بزند نگه داشته شده.
 
 void updateVehicleData() {
-    obd2Reader.readAllPIDs(currentVehicleData);  // [BLOCKING] فقط برای استفاده‌ی دستی/تست
+    obd2Reader.readAllPIDs(currentVehicleData);
     
     // توجه: خواندن ولتاژ باطری از طریق CAN در بسیاری از خودروها پشتیبانی نمی‌شود
     currentVehicleData.batteryVoltage = 12.6f;  // مقدار پیش‌فرض

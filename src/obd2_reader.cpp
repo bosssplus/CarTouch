@@ -33,14 +33,6 @@ OBD2Reader::OBD2Reader(CANManager& canManager) : _can(canManager) {
     _lastError = 0;
     _lastRequestTime = 0;
     _requestInterval = 50;  // حداقل 50ms بین درخواست‌ها
-
-    // state machine غیرمسدودکننده
-    _pollState = OBD_POLL_IDLE;
-    _pollIndex = 0;
-    _pollWaitStartMs = 0;
-    _hasCompletedRound = false;
-    _pollIntervalMs = 200;   // فاصله بین دو دور کامل خواندن
-    _lastRoundStartMs = 0;
 }
 
 // ======================== مقداردهی اولیه ========================
@@ -203,10 +195,7 @@ uint16_t OBD2Reader::readEngineRuntime() {
     return 0;
 }
 
-// ======================== خواندن همه PIDها [BLOCKING - سازگاری عقب‌رو] ========================
-// این تابع دیگر در مسیر اصلی loop() صدا زده نمی‌شود (به جایش از
-// update() + getLatestData() استفاده کنید). فقط برای کدی نگه داشته
-// شده که مستقیماً به این امضا وابسته است.
+// ======================== خواندن همه PIDها ========================
 
 void OBD2Reader::readAllPIDs(VehicleData& data) {
     data.engineRPM = readEngineRPM();
@@ -220,186 +209,6 @@ void OBD2Reader::readAllPIDs(VehicleData& data) {
     data.fuelLevel = readFuelLevel();
     delay(10);
     data.engineRuntime = readEngineRuntime();
-}
-
-// ======================== [NON-BLOCKING] state machine خواندن دوره‌ای ========================
-//
-// ترتیب PID هر دور: RPM(0) → Speed(1) → Coolant(2) → Throttle(3) →
-// Fuel(4) → Runtime(5) → پایان دور → مکث _pollIntervalMs → دور بعد.
-//
-// این جایگزین معماری برای مورد ۴ چک‌لیست تجاری است: readAllPIDs قدیم
-// در بدترین حالت (۶ PID، هرکدام تا ۲۰۰ms timeout) می‌توانست تا حدود
-// ۱٫۲ ثانیه loop() را کاملاً مسدود کند. اینجا هیچ delay() و هیچ حلقه‌ی
-// "منتظر بمان تا..." وجود ندارد؛ هر فراخوانی update() فقط یک قدم کوچک
-// (ارسال یک درخواست، یا یک بار چک غیرمسدودکننده‌ی صف CAN) انجام می‌دهد
-// و بلافاصله برمی‌گردد.
-
-void OBD2Reader::_applyPidToData(uint8_t pid, const ObdResponse& resp, VehicleData& data) {
-    if (!resp.success) return;  // PID بی‌پاسخ: مقدار قبلی در _pendingData دست‌نخورده می‌ماند
-
-    switch (pid) {
-        case OBD_PID_ENGINE_RPM:
-            if (resp.length >= 2)
-                data.engineRPM = ((uint16_t)resp.data[0] * 256 + resp.data[1]) / 4;
-            break;
-        case OBD_PID_VEHICLE_SPEED:
-            if (resp.length >= 1) data.vehicleSpeed = resp.data[0];
-            break;
-        case OBD_PID_COOLANT_TEMP:
-            if (resp.length >= 1) data.coolantTemp = (int8_t)(resp.data[0] - 40);
-            break;
-        case OBD_PID_THROTTLE_POS:
-            if (resp.length >= 1)
-                data.throttlePos = (uint8_t)((float)resp.data[0] * 100.0f / 255.0f);
-            break;
-        case OBD_PID_FUEL_LEVEL:
-            if (resp.length >= 1)
-                data.fuelLevel = (uint8_t)((float)resp.data[0] * 100.0f / 255.0f);
-            break;
-        case OBD_PID_RUNTIME:
-            if (resp.length >= 2)
-                data.engineRuntime = ((uint16_t)resp.data[0] * 256 + resp.data[1]);
-            break;
-    }
-}
-
-// جدول PID به ترتیب _pollIndex - باید با _applyPidToData هماهنگ بماند
-static const uint8_t OBD_POLL_PID_TABLE[6] = {
-    OBD_PID_ENGINE_RPM, OBD_PID_VEHICLE_SPEED, OBD_PID_COOLANT_TEMP,
-    OBD_PID_THROTTLE_POS, OBD_PID_FUEL_LEVEL, OBD_PID_RUNTIME
-};
-
-void OBD2Reader::_pollStartNextPid() {
-    uint8_t pid = OBD_POLL_PID_TABLE[_pollIndex];
-
-    CanMessage request;
-    request.id = OBD_REQUEST_ID;
-    request.isExtended = false;
-    request.isRemote = false;
-    request.length = 8;
-    request.data[0] = 0x02;
-    request.data[1] = OBD_MODE_CURRENT;
-    request.data[2] = pid;
-    request.data[3] = 0x00;
-    request.data[4] = 0x00;
-    request.data[5] = 0x00;
-    request.data[6] = 0x00;
-    request.data[7] = 0x00;
-
-    // sendMessage خودش هم non-blocking-ish است (فقط تا timeout کوتاه صف
-    // TX منتظر می‌ماند، نه پاسخ ECU) - این بخش قبلاً هم مشکل نبود.
-    // مشکل قبلی حلقه‌ی *دریافت* پاسخ بود که اینجا حذف شده.
-    if (_can.sendMessage(request)) {
-        _pollWaitStartMs = millis();
-        _pollState = OBD_POLL_WAITING;
-    } else {
-        // ارسال ناموفق: این PID را رد کن و برو سراغ بعدی، تا یک PID
-        // خراب کل دور را برای همیشه گیر ندهد
-        _pollIndex++;
-        if (_pollIndex >= _POLL_PID_COUNT) {
-            _pollState = OBD_POLL_DONE;
-        } else {
-            _pollState = OBD_POLL_SENDING;
-        }
-    }
-}
-
-void OBD2Reader::_pollCheckResponse() {
-    uint8_t pid = OBD_POLL_PID_TABLE[_pollIndex];
-
-    // چک *غیرمسدودکننده* صف دریافت (timeout=0 داخل receiveMessageNonBlocking)
-    CanMessage reply;
-    bool gotSomething = _can.receiveMessageNonBlocking(reply);
-
-    if (gotSomething) {
-        if ((reply.id == OBD_REPLY_ID || reply.id == OBD_REPLY_ID_2) &&
-            reply.length >= 3 &&
-            reply.data[1] == (OBD_MODE_CURRENT + 0x40) &&
-            reply.data[2] == pid) {
-
-            ObdResponse resp;
-            resp.pid = pid;
-            resp.length = reply.length - 3;
-            resp.success = true;
-            resp.timestamp = millis();
-            for (int i = 0; i < resp.length && i < 6; i++) {
-                resp.data[i] = reply.data[i + 3];
-            }
-            _applyPidToData(pid, resp, _pendingData);
-
-            _pollIndex++;
-            _pollState = (_pollIndex >= _POLL_PID_COUNT) ? OBD_POLL_DONE : OBD_POLL_SENDING;
-            return;
-        }
-        // پیامی دریافت شد ولی مربوط به این PID نبود (ترافیک دیگر باس)؛
-        // دور همین حلقه‌ی update() بعدی دوباره چک می‌شود - بدون انتظار.
-        return;
-    }
-
-    // هیچ پیامی در صف نبود این‌بار - چک timeout (بدون delay/بدون حلقه)
-    if (millis() - _pollWaitStartMs > 200) {
-        ObdResponse timeoutResp;
-        timeoutResp.success = false;
-        _applyPidToData(pid, timeoutResp, _pendingData);  // مقدار قبلی حفظ می‌شود
-
-        _pollIndex++;
-        _pollState = (_pollIndex >= _POLL_PID_COUNT) ? OBD_POLL_DONE : OBD_POLL_SENDING;
-    }
-    // در غیر این صورت: همچنان در حال انتظاریم، دفعه‌ی بعد update() دوباره چک می‌کند
-}
-
-void OBD2Reader::update() {
-    uint32_t now = millis();
-
-    switch (_pollState) {
-        case OBD_POLL_IDLE:
-            if (now - _lastRoundStartMs >= _pollIntervalMs) {
-                _pendingData = _hasCompletedRound ? _latestData : VehicleData();
-                _pollIndex = 0;
-                _lastRoundStartMs = now;
-                _pollState = OBD_POLL_SENDING;
-            }
-            break;
-
-        case OBD_POLL_SENDING:
-            // رعایت حداقل فاصله‌ی بین درخواست‌های تکی (بدون delay - فقط
-            // اگر زودتر از موعد بود، همین دور update() کاری نمی‌کنیم)
-            if (now - _lastRequestTime >= _requestInterval) {
-                _pollStartNextPid();
-                _lastRequestTime = now;
-            }
-            break;
-
-        case OBD_POLL_WAITING:
-            _pollCheckResponse();
-            break;
-
-        case OBD_POLL_DONE:
-            _latestData.engineRPM      = _pendingData.engineRPM;
-            _latestData.vehicleSpeed   = _pendingData.vehicleSpeed;
-            _latestData.coolantTemp    = _pendingData.coolantTemp;
-            _latestData.throttlePos    = _pendingData.throttlePos;
-            _latestData.fuelLevel      = _pendingData.fuelLevel;
-            _latestData.engineRuntime  = _pendingData.engineRuntime;
-            _hasCompletedRound = true;
-            _pollState = OBD_POLL_IDLE;
-            break;
-    }
-}
-
-bool OBD2Reader::getLatestData(VehicleData& outData) {
-    if (!_hasCompletedRound) return false;
-    outData.engineRPM     = _latestData.engineRPM;
-    outData.vehicleSpeed  = _latestData.vehicleSpeed;
-    outData.coolantTemp   = _latestData.coolantTemp;
-    outData.throttlePos   = _latestData.throttlePos;
-    outData.fuelLevel     = _latestData.fuelLevel;
-    outData.engineRuntime = _latestData.engineRuntime;
-    return true;
-}
-
-ObdPollState OBD2Reader::getPollState() {
-    return _pollState;
 }
 
 // ======================== بررسی پشتیبانی PID ========================

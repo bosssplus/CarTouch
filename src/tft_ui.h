@@ -111,18 +111,6 @@ public:
      */
     void setDeviceMode(DeviceMode mode);
 
-    /**
-     * === جدید (چک‌لیست تجاری #9: کالیبراسیون واقعی تاچ‌اسکرین) ===
-     * اجرای فرآیند کالیبراسیون تعاملی (۵ نقطه، با استفاده از
-     * calibrateTouch() خود کتابخانه‌ی TFT_eSPI). نتیجه در AppConfig
-     * (touchCalData/touchCalibrated) ذخیره می‌شود تا در بوت‌های بعدی
-     * دوباره لازم نباشد. این تابع مسدودکننده است (منتظر لمس کاربر در
-     * ۵ نقطه می‌ماند) و باید فقط از setup() یا از منوی تنظیمات (که
-     * کاربر عمداً آن را خواسته) صدا زده شود - هرگز از داخل loop()
-     * اصلی به‌صورت خودکار در میانه‌ی کار عادی دستگاه.
-     */
-    void runTouchCalibration();
-
 private:
     bool _initialized;
     UIControlCallback _controlCallback;
@@ -245,8 +233,6 @@ private:
     static void _btnPasswordSaveEventHandler(lv_event_t* e);
     static void _btnPasswordCancelEventHandler(lv_event_t* e);
     static void _taFocusEventHandler(lv_event_t* e);
-    // === جدید (چک‌لیست تجاری #9) ===
-    static void _btnRecalibrateTouchEventHandler(lv_event_t* e);
     
     // === جدید v2.0: Event handlers تب یادگیری ===
     static void _btnStartLearnEventHandler(lv_event_t* e);
