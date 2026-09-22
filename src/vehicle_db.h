@@ -39,20 +39,13 @@
 // ۲۰-۲۴ سیگنال دارند، پس این مقدار به ۲۴ کاهش یافت. با این تغییر
 // حجم آرایه‌ی _messages از ۱٫۲۲ مگابایت به حدود ۱۵۰ کیلوبایت می‌رسد.
 //
-// === اصلاحیه (چک‌لیست تجاری #7 و #8) ===
-// طبق توصیه‌ی بالا، vehicleDB اکنون در main.cpp با EXT_RAM_BSS_ATTR
-// در PSRAM قرار می‌گیرد (ESP32-S3-WROOM-1-N16R8 دارای ۸ مگابایت
-// PSRAM است)، پس دیگر محدودیت سخت‌گیرانه‌ی DRAM داخلی معنی ندارد.
-// با این آزادی، MAX_DBC_MESSAGES از ۵۰ به ۱۵۰ افزایش یافت تا فایل‌های
-// بزرگ‌تر (مثلاً toyota_2017_ref_pt.dbc با ۱۴۳ پیام) بدون truncate
-// شدن بارگذاری شوند. فایل‌های بسیار بزرگ‌تر (FORD_CADS_64.dbc,
-// vw_mqb.dbc که صدها پیام دارند) هنوز ممکن است به سقف برخورد کنند؛
-// در آن صورت لاگ هشدار (که قبلاً اضافه شده بود) در Serial دیده
-// می‌شود. افزایش بیشتر این مقدار ممکن است ولی حجم PSRAM/زمان
-// پارس در بوت را افزایش می‌دهد - با MAX_DBC_MESSAGES=150 و
-// MAX_DBC_SIGNALS=24، حجم آرایه‌ی هر VehicleProfile حدود ۳۷۰
-// کیلوبایت است که در ۸ مگابایت PSRAM به‌راحتی جا می‌شود.
-#define MAX_DBC_MESSAGES    150
+// توصیه‌ی تکمیلی (نیاز به تغییر در main.cpp دارد، اینجا اعمال نشده):
+// چون board_build.psram در platformio.ini فعال است، بهتر است آبجکت
+// vehicleDB (یا حداقل این آرایه) با EXT_RAM_BSS_ATTR در PSRAM قرار
+// بگیرد تا فشار روی DRAM داخلی که WiFi/BLE/LVGL هم به آن نیاز دارند
+// کم شود:
+//   EXT_RAM_BSS_ATTR VehicleDB vehicleDB;
+#define MAX_DBC_MESSAGES    50
 #define MAX_DBC_SIGNALS     24
 
 // نوع داده سیگنال DBC
@@ -66,7 +59,7 @@ enum SignalType : uint8_t {
 // ساختار یک سیگنال DBC
 struct DbcSignal {
     char name[32] = {0};          // نام سیگنال (مثلاً "DoorLockStatus")
-    uint8_t startBit = 0;         // بیت شروع (طبق تعریف خام DBC - نگاه کنید به isBigEndian)
+    uint8_t startBit = 0;         // بیت شروع
     uint8_t length = 0;           // طول سیگنال (بیت)
     SignalType type = SIG_UNSIGNED;
     float scale = 1.0f;           // ضریب
@@ -77,17 +70,6 @@ struct DbcSignal {
     char comment[64] = {0};       // توضیحات
     bool isMultiplexed = false;   // اگر true: سیگنال Multiplexed
     uint8_t multiplexValue = 0;   // مقدار Multiplex
-
-    // === جدید (چک‌لیست تجاری #6) ===
-    // '@0' در فایل DBC = Motorola/big-endian (bit numbering از MSB هر
-    // بایت)، '@1' = Intel/little-endian (bit numbering از LSB). قبلاً
-    // این فلگ خوانده می‌شد ولی در extractSignalValue/encodeSignalValue
-    // نادیده گرفته می‌شد؛ یعنی هر سیگنال Motorola (که در فایل‌های
-    // واقعی این پروژه - مثلاً VW MQB، Ford، بسیاری از سیگنال‌های
-    // BMW - رایج است) مقدار کاملاً غلط می‌داد. مقدار غلط برای سیگنالی
-    // مثل "DoorLockStatus" یا "دور موتور" یعنی نمایش نادرست یا حتی
-    // (در فرمان‌های نوشتنی احتمالی آینده) ارسال فرمان اشتباه.
-    bool isBigEndian = false;     // true = Motorola(@0), false = Intel(@1، پیش‌فرض DBC رایج‌تر)
 };
 
 // ساختار یک پیام DBC
@@ -198,16 +180,7 @@ private:
     DbcMessage _messages[MAX_DBC_MESSAGES];
     uint8_t _messageCount;
     VehicleProfile _activeVehicle;
-    // === اصلاحیه (چک‌لیست تجاری #7) ===
-    // قبلاً فقط ۱۰ جا (و در عمل فقط ۴ مورد پر شده) وجود داشت. از ۵۷
-    // فایل DBC موجود در data/dbc، حدود ۲۹ فایل واقعاً معرف یک "خودرو"
-    // با پیام‌های بدنه/پیشرانش قابل استفاده هستند (بقیه فایل‌های
-    // جانبی رادار/ADAS/آبجکت هستند که به‌عنوان مکمل، نه به‌تنهایی،
-    // معنی دارند - نگاه کنید به کامنت‌های begin()). آرایه به ۳۲
-    // افزایش یافت.
-    // اصلاحیه: تعداد واقعی ورودی‌های begin() فعلی ۳۸ است؛ آرایه به ۴۰
-    // (با حاشیه‌ی ایمنی کوچک) افزایش یافت تا از سرریز جلوگیری شود.
-    VehicleProfile _vehicleList[40];  // لیست خودروهای پشتیبانی‌شده
+    VehicleProfile _vehicleList[10];  // لیست خودروهای پشتیبانی‌شده
     uint8_t _vehicleCount;
     bool _initialized;
     

@@ -83,6 +83,17 @@ public:
                             ActiveProfileManager* profileManager,
                             VehicleControl* vehicleControl);
 
+    /**
+     * === جدید (چک‌لیست تجاری #20: همگام‌سازی session بین TFT و وب) ===
+     * تمام session های وب فعال (هم HTTP session token و هم auth هر
+     * کلاینت WebSocket) را باطل می‌کند. این متد به‌عنوان
+     * PasswordChangeCallback (نگاه کنید به config.h) با
+     * registerPasswordChangeCallback ثبت می‌شود تا هرگاه رمز از
+     * *هر* رابطی (TFT یا خود وب) عوض شود، صدا زده شود - نه فقط وقتی
+     * از خود وب عوض شده.
+     */
+    void invalidateAllSessions();
+
 private:
     AsyncWebServer _server;
     AsyncWebSocket _ws;
@@ -121,6 +132,12 @@ private:
     bool _rebootPending;       // ریست بعد از OTA موفق (در update() انجام می‌شود)
     uint32_t _rebootAt;
     
+    // پوینتر استاتیک به تنها نمونه‌ی زنده‌ی WebServerManager - لازم
+    // چون registerPasswordChangeCallback فقط یک function pointer
+    // ساده (بدون capture) می‌پذیرد، مشابه الگوی pThisUI در tft_ui.cpp
+    static WebServerManager* _instance;
+    static void _staticInvalidateSessions();  // پل بدون capture به invalidateAllSessions()
+
     bool _authenticate(AsyncWebServerRequest* request);
     String _generateSessionToken();
     bool _isValidSessionToken(const char* token);
