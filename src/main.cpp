@@ -20,7 +20,6 @@
 #include <Arduino.h>
 #include <SPIFFS.h>
 #include <esp_task_wdt.h>
-#include <esp_attr.h>   // برای EXT_RAM_ATTR/EXT_RAM_BSS_ATTR (قرار دادن vehicleDB در PSRAM)
 
 #include "config.h"
 #include "can_manager.h"
@@ -49,39 +48,35 @@ OBD2Reader obd2Reader(canManager);
 // با افزایش MAX_DBC_MESSAGES به ۱۵۰ (به config.h/vehicle_db.h مراجعه
 // کنید)، حجم آرایه‌ی داخلی این آبجکت حدود ۴۶۰ کیلوبایت است که تقریباً
 // کل SRAM داخلی ESP32-S3 (~512KB) را می‌بلعد و برای WiFi/LVGL/استک‌ها
-// چیزی باقی نمی‌گذارد. EXT_RAM_BSS_ATTR این آبجکت را به PSRAM
-// (ESP32-S3-WROOM-1-N16R8 دارای ۸ مگابایت PSRAM است، که در
-// platformio.ini با board_build.psram=enable فعال شده) منتقل می‌کند.
-// ⚠️ نکته‌ی صادقانه: EXT_RAM_BSS_ATTR روی Arduino-ESP32/ESP-IDF یک
-// ماکروی رسمی و مستند است، ولی این تغییر روی سخت‌افزار واقعی تست
-// نشده. قبل از فلش نهایی، حتماً از طریق Serial Monitor مقدار
-// ESP.getFreePsram() و ESP.getFreeHeap() را قبل/بعد این تغییر مقایسه
-// کنید تا مطمئن شوید آبجکت واقعاً در PSRAM نشسته و نه اینکه لینکر
-// بی‌صدا آن را در DRAM گذاشته (در تنظیمات نادرست PSRAM چنین چیزی
-// ممکن است رخ دهد).
+// چیزی باقی نمی‌گذارد؛ باید در PSRAM جا بگیرد.
 //
-// === اصلاح (باگ کامپایل) ===
-// EXT_RAM_BSS_ATTR در نسخه‌ی esp_attr.h این زنجیره‌ی ابزار (ESP-IDF
-// قدیمی‌تر که Arduino-ESP32 از آن استفاده می‌کند) اصلاً وجود ندارد؛
-// فقط EXT_RAM_ATTR تعریف شده. یک ماکروی سازگار با هر دو نسخه تعریف
-// می‌کنیم تا روی هر دو نسخه‌ی core (۲.x و ۳.x) کامپایل شود.
-#if defined(EXT_RAM_BSS_ATTR)
-#define CARTOUCH_PSRAM_BSS_ATTR EXT_RAM_BSS_ATTR
-#elif defined(EXT_RAM_ATTR)
-#define CARTOUCH_PSRAM_BSS_ATTR EXT_RAM_ATTR
-#else
-#define CARTOUCH_PSRAM_BSS_ATTR
-#endif
-
-CARTOUCH_PSRAM_BSS_ATTR VehicleDB vehicleDB;
+// === اصلاح (باگ لینک - DRAM overflow) ===
+// نسخه‌ی قبلی این خط از EXT_RAM_ATTR/EXT_RAM_BSS_ATTR روی یک آبجکت
+// global استفاده می‌کرد. این attribute فقط زمانی واقعاً به PSRAM
+// می‌رود که گزینه‌ی CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY در
+// sdkconfig فعال باشد؛ در کتابخانه‌های از پیش کامپایل‌شده‌ی
+// Arduino-ESP32 که PlatformIO دانلود می‌کند این گزینه فعال نیست، پس
+// attribute بی‌صدا نادیده گرفته می‌شد و کل ۴۶۰ کیلوبایت همچنان در
+// DRAM داخلی می‌ماند → لینکر با «region dram0_0_seg overflowed» شکست
+// می‌خورد (دقیقاً همان خطری که یادداشت قبلی هشدارش را داده بود).
+//
+// راه‌حل قابل‌اعتماد روی این زنجیره‌ی ابزار: تخصیص دینامیک با new/malloc.
+// هسته‌ی Arduino-ESP32 وقتی PSRAM فعال باشد، تخصیص‌های بزرگ‌تر از ۴
+// کیلوبایت را به‌طور خودکار از PSRAM می‌دهد - نیازی به هیچ attribute
+// خاصی نیست. بنابراین vehicleDB اکنون یک pointer است که در ابتدای
+// setup() با `new` ساخته می‌شود (نه یک آبجکت global در .bss).
+// ActiveProfileManager و VehicleControl هم چون یک reference به
+// آبجکت‌های قبل از خودشان نگه می‌دارند، به همین ترتیب به pointer
+// تبدیل و در setup() (به همان ترتیب قبلی) ساخته می‌شوند.
+VehicleDB* vehicleDB = nullptr;
 
 // === جدید v2.0: ذخیره‌سازی پروفایل‌های سفارشی + موتور یادگیری ===
 CustomVehicleStore customVehicleStore;
 LearnEngine learnEngine(canManager);
-ActiveProfileManager activeProfileManager(vehicleDB, customVehicleStore);
+ActiveProfileManager* activeProfileManager = nullptr;
 
 // کنترل خودرو (حالا با ActiveProfileManager به‌جای CAN ID مستقیم)
-VehicleControl vehicleControl(canManager, activeProfileManager);
+VehicleControl* vehicleControl = nullptr;
 
 // رابط کاربری TFT
 TFT_UI tftUI;
@@ -127,6 +122,24 @@ void setup() {
     Serial.println(" CarTouch v2.0 - ESP32-S3 Car Control");
     Serial.println(" (+ Learn Mode / Custom Vehicle Database)");
     Serial.println("========================================\n");
+
+    // === جدید (اصلاح باگ لینک DRAM overflow) ===
+    // vehicleDB باید قبل از هر استفاده‌ای ساخته شود، و از آن‌جا که
+    // حجمش بزرگ است باید از heap (که با PSRAM فعال، تخصیص‌های بزرگ
+    // را خودکار در PSRAM می‌دهد) گرفته شود - نه یک آبجکت global در
+    // DRAM. activeProfileManager و vehicleControl به همین ترتیب و
+    // بلافاصله بعد ساخته می‌شوند چون هرکدام به‌صورت reference به
+    // قبلی نیاز دارند.
+    vehicleDB = new VehicleDB();
+    activeProfileManager = new ActiveProfileManager(*vehicleDB, customVehicleStore);
+    vehicleControl = new VehicleControl(canManager, *activeProfileManager);
+    if (!vehicleDB || !activeProfileManager || !vehicleControl) {
+        Serial.println("❌❌❌ [INIT] تخصیص حافظه برای vehicleDB/activeProfileManager/vehicleControl شکست خورد!");
+        Serial.println("❌❌❌ [INIT] احتمالاً PSRAM موجود/فعال نیست - دستگاه متوقف می‌شود.");
+        while (true) { delay(1000); }
+    }
+    Serial.printf("[INIT] PSRAM آزاد: %u bytes | Heap آزاد: %u bytes\n",
+                  (unsigned)ESP.getFreePsram(), (unsigned)ESP.getFreeHeap());
 
     // 0. === جدید: راه‌اندازی Task Watchdog ===
     // باید خیلی زود در setup() باشد تا حتی هنگ در همین تابع هم پوشش
@@ -183,14 +196,14 @@ void setup() {
     obd2Reader.begin();
     
     // 5. شروع Vehicle DB (DBC - v1.0)
-    vehicleDB.begin();
+    vehicleDB->begin();
     
     // 6. === جدید v2.0: شروع CustomVehicleStore (باید بعد از SPIFFS.begin باشد) ===
     Serial.println("[INIT] شروع CustomVehicleStore...");
     customVehicleStore.begin();
     
     // 7. شروع Vehicle Control (حالا با activeProfileManager)
-    vehicleControl.begin();
+    vehicleControl->begin();
     
     // === تغییر: با روشن شدن، هیچ خودرویی خودکار انتخاب نمی‌شود ===
     // activeProfileManager از قبل با ACTIVE_KIND_NONE مقداردهی اولیه شده
@@ -205,7 +218,7 @@ void setup() {
     // پوینترهای داخلی TFT_UI به LearnEngine/CustomVehicleStore/... همه
     // nullptr می‌مانند - این یک نقطه‌ی حیاتی سیم‌کشی است.)
     tftUI.attachLearnModules(&learnEngine, &customVehicleStore, 
-                              &activeProfileManager, &vehicleControl);
+                              activeProfileManager, vehicleControl);
     tftUI.begin();
     tftUI.setControlCallback(handleCommand);
     tftUI.showNotification("🚗 CarTouch آماده است");
@@ -216,7 +229,7 @@ void setup() {
     
     // 10. === جدید v2.0: اتصال ماژول‌های Learn Mode به وب سرور قبل از begin() ===
     webServer.attachLearnModules(&learnEngine, &customVehicleStore, 
-                                  &activeProfileManager, &vehicleControl);
+                                  activeProfileManager, vehicleControl);
     
     // 11. شروع وب سرور
     webServer.begin();
@@ -344,32 +357,32 @@ void handleControlCommand(const char* command) {
     bool result = false;
     
     if (strcmp(command, "lock") == 0) {
-        result = vehicleControl.lockAllDoors();
+        result = vehicleControl->lockAllDoors();
     } 
     else if (strcmp(command, "unlock") == 0) {
-        result = vehicleControl.unlockAllDoors();
+        result = vehicleControl->unlockAllDoors();
     } 
     else if (strcmp(command, "windows_up") == 0) {
-        result = vehicleControl.allWindowsUp();
+        result = vehicleControl->allWindowsUp();
     } 
     else if (strcmp(command, "windows_down") == 0) {
-        result = vehicleControl.allWindowsDown();
+        result = vehicleControl->allWindowsDown();
     } 
     else if (strcmp(command, "sunroof") == 0) {
-        result = vehicleControl.sunroofOpen();
+        result = vehicleControl->sunroofOpen();
     } 
     else if (strcmp(command, "trunk") == 0) {
-        result = vehicleControl.trunkOpen();
+        result = vehicleControl->trunkOpen();
     } 
     else if (strcmp(command, "mirror") == 0) {
-        result = vehicleControl.foldMirrors();
+        result = vehicleControl->foldMirrors();
     } 
     else if (strcmp(command, "alarm") == 0) {
         if (currentVehicleData.alarmState == ALARM_DISARMED) {
-            result = vehicleControl.alarmArm();
+            result = vehicleControl->alarmArm();
             currentVehicleData.alarmState = ALARM_ARMED;
         } else {
-            result = vehicleControl.alarmDisarm();
+            result = vehicleControl->alarmDisarm();
             currentVehicleData.alarmState = ALARM_DISARMED;
         }
     } 
@@ -403,7 +416,7 @@ void handleControlCommand(const char* command) {
         char* sep = strchr(buf, '|');
         if (sep) {
             *sep = '\0';
-            activeProfileManager.selectDBCVehicle(buf, sep + 1);
+            activeProfileManager->selectDBCVehicle(buf, sep + 1);
             tftUI.showNotification("🚗 خودرو (DBC) انتخاب شد");
         }
         return;
@@ -411,7 +424,7 @@ void handleControlCommand(const char* command) {
     else if (strncmp(command, "vehicle_select_custom:", 22) == 0) {
         // === جدید v2.0: انتخاب پروفایل سفارشی با ایندکس از TFT ===
         uint8_t idx = (uint8_t)atoi(command + 22);
-        if (activeProfileManager.selectCustomVehicle(idx)) {
+        if (activeProfileManager->selectCustomVehicle(idx)) {
             tftUI.showNotification("🚗 خودرو (سفارشی) انتخاب شد");
         } else {
             tftUI.showNotification("❌ پروفایل یافت نشد");
@@ -428,7 +441,7 @@ void handleControlCommand(const char* command) {
         tftUI.showNotification("✅ فرمان ارسال شد");
         webServer.broadcastStatus(command);
     } else {
-        String reason = vehicleControl.getLastErrorMessage();
+        String reason = vehicleControl->getLastErrorMessage();
         if (reason.length() > 0) {
             tftUI.showNotification(("❌ " + reason).c_str());
         } else {
