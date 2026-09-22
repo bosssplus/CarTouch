@@ -69,6 +69,9 @@ document.getElementById('b-fs').onclick=function(){up('fs');};
 
 // ======================== سازنده ========================
 
+// === جدید (چک‌لیست تجاری #20) ===
+WebServerManager* WebServerManager::_instance = nullptr;
+
 WebServerManager::WebServerManager()
     : _server(WEB_PORT), _ws("/ws") {
     _commandCallback = nullptr;
@@ -86,6 +89,37 @@ WebServerManager::WebServerManager()
     _customStore = nullptr;
     _profileManager = nullptr;
     _vehicleControl = nullptr;
+
+    // === جدید (چک‌لیست تجاری #20) ===
+    // فرض معماری فعلی: فقط یک نمونه‌ی WebServerManager وجود دارد
+    // (دقیقاً مثل webServer در main.cpp). اگر در آینده چند نمونه
+    // ساخته شود، این الگو باید به لیست/vector تغییر کند.
+    _instance = this;
+    registerPasswordChangeCallback(&WebServerManager::_staticInvalidateSessions);
+}
+
+void WebServerManager::_staticInvalidateSessions() {
+    if (_instance) {
+        _instance->invalidateAllSessions();
+    }
+}
+
+void WebServerManager::invalidateAllSessions() {
+    // ۱. باطل کردن HTTP session token - همان کاری که قبلاً فقط داخل
+    // route تغییر رمز خود وب انجام می‌شد.
+    _sessionToken = "";
+    _sessionTokenIssuedAt = 0;
+
+    // ۲. باطل کردن auth هر کلاینت WebSocket متصل - این بخش قبلاً کلاً
+    // وجود نداشت. بدون این، حتی بعد از پاک شدن session token، یک
+    // کلاینت WebSocket که از قبل authenticated=true شده بود، همچنان
+    // می‌توانست فرمان کنترلی بفرستد (چون _isValidSessionToken فقط
+    // برای پیام "auth" اولیه چک می‌شود، نه برای هر فرمان بعدی).
+    for (int i = 0; i < WS_MAX_CLIENTS; i++) {
+        _clientAuth[i].authenticated = false;
+    }
+
+    Serial.println("[WEB] 🔒 همه‌ی session های وب باطل شدند (رمز از جایی تغییر کرد)");
 }
 
 // ======================== اتصال ماژول‌های Learn Mode (جدید v2.0) ========================
@@ -276,10 +310,14 @@ void WebServerManager::begin(uint16_t port) {
             return;
         }
         
+        // === اصلاحیه (چک‌لیست تجاری #20) ===
+        // پاک کردن دستی _sessionToken قبلاً اینجا تکراری بود؛ اکنون
+        // این کار به‌صورت خودکار و یکسان (هم برای این مسیر و هم برای
+        // TFT) توسط callback ثبت‌شده در سازنده انجام می‌شود - نگاه
+        // کنید به invalidateAllSessions() و registerPasswordChangeCallback
+        // در سازنده‌ی این کلاس.
         bool ok = setWebPassword(newUser.length() > 0 ? newUser.c_str() : nullptr, newPass.c_str());
         if (ok) {
-            _sessionToken = "";
-            _sessionTokenIssuedAt = 0;
             Serial.println("[WEB] رمز وب با موفقیت تغییر کرد");
             request->send(200, "application/json", "{\"success\":true}");
         } else {

@@ -27,10 +27,43 @@ lv_disp_draw_buf_t TFT_UI::_dispBuf;
 lv_color_t TFT_UI::_buf1[LVGL_BUF_SIZE];
 lv_color_t TFT_UI::_buf2[LVGL_BUF_SIZE];
 
-static uint16_t touchCalibX[4] = {250, 245, 20, 25};
-static uint16_t touchCalibY[4] = {70, 360, 370, 80};
+// === اصلاحیه (چک‌لیست تجاری #9) ===
+// این دو آرایه‌ی ثابت قبلاً فقط یک حدس بودند و اصلاً در _lvglTouchRead
+// (که به‌جایش یک map خطی ساده و ثابت با فرض نادرست "همیشه دقیقاً
+// 320x240 خام" استفاده می‌کرد) خوانده نمی‌شدند. اکنون کالیبراسیون
+// واقعی از AppConfig (که با runTouchCalibration() پر می‌شود) خوانده
+// و مستقیماً به تابع calibrateTouch() خود TFT_eSPI داده می‌شود که
+// خودش نگاشت خام→پیکسل صحیح (شامل چرخش صفحه) را انجام می‌دهد.
 
-static TFT_UI* pThisUI = nullptr;
+// ======================== تابع خواندن تاچ ========================
+// === اصلاحیه (چک‌لیست تجاری #9) ===
+// قبلاً: map(touchX, 0, 320, 0, TFT_WIDTH) - این فرض می‌کرد بازه‌ی
+// خام ADC همیشه دقیقاً برابر ابعاد پیکسلی صفحه است که تقریباً هرگز
+// درست نیست (کنترلر لمسی XPT2046 معمولاً بازه‌ی خام ADC ۰-۴۰۹۵ یا
+// مشابه می‌دهد، نه ۰-۳۲۰) و هیچ نسبتی با کالیبراسیون واقعی صفحه
+// نداشت. حالا اگر کالیبراسیون انجام شده باشد، از setTouch() خود
+// TFT_eSPI (که یک‌بار در begin() با داده‌ی ذخیره‌شده صدا زده می‌شود)
+// استفاده می‌شود که getTouch() را وادار می‌کند خودش مختصات صحیح
+// پیکسل را برگرداند - دیگر نیازی به map دستی اینجا نیست.
+void TFT_UI::_lvglTouchRead(lv_indev_drv_t* drv, lv_indev_data_t* data) {
+    uint16_t touchX, touchY;
+    bool touched = pTft->getTouch(&touchX, &touchY, 600);
+    
+    if (touched) {
+        // اگر setTouch() قبلاً با کالیبراسیون معتبر صدا زده شده باشد،
+        // touchX/touchY از getTouch() همین‌الان مختصات پیکسل صحیح
+        // هستند (TFT_eSPI خودش تبدیل را انجام می‌دهد) - نیازی به map
+        // دستی نیست. اگر کالیبره نشده باشد (touchCalibrated=false)،
+        // مقادیر خام برگردانده می‌شوند که نادرست خواهند بود؛ در آن
+        // حالت main.cpp/setup() باید قبل از استفاده‌ی عادی از UI،
+        // runTouchCalibration() را صدا زده باشد.
+        data->point.x = touchX;
+        data->point.y = touchY;
+        data->state = LV_INDEV_STATE_PR;
+    } else {
+        data->state = LV_INDEV_STATE_REL;
+    }
+}
 
 // === جدید v2.0: لیست برچسب‌های پیش‌فرض برای dropdown انتخاب فرمان ===
 // این رشته با کاراکتر '\n' جداشده دقیقاً همان چیزی است که
@@ -74,21 +107,6 @@ void TFT_UI::_lvglDisplayFlush(lv_disp_drv_t* drv, const lv_area_t* area, lv_col
     pTft->endWrite();
     
     lv_disp_flush_ready(drv);
-}
-
-// ======================== تابع خواندن تاچ (v1.0) ========================
-
-void TFT_UI::_lvglTouchRead(lv_indev_drv_t* drv, lv_indev_data_t* data) {
-    uint16_t touchX, touchY;
-    bool touched = pTft->getTouch(&touchX, &touchY, 600);
-    
-    if (touched) {
-        data->point.x = map(touchX, 0, 320, 0, TFT_WIDTH);
-        data->point.y = map(touchY, 0, 240, 0, TFT_HEIGHT);
-        data->state = LV_INDEV_STATE_PR;
-    } else {
-        data->state = LV_INDEV_STATE_REL;
-    }
 }
 
 // ======================== سازنده ========================
@@ -164,6 +182,24 @@ void TFT_UI::begin() {
     
     pinMode(PIN_TFT_BL, OUTPUT);
     analogWrite(PIN_TFT_BL, TFT_BRIGHTNESS_DAY);
+
+    // === جدید (چک‌لیست تجاری #9: کالیبراسیون واقعی تاچ‌اسکرین) ===
+    // اگر قبلاً کالیبراسیون معتبری در NVS ذخیره شده، همان را به
+    // TFT_eSPI بده تا getTouch() از همین الان مختصات پیکسل صحیح
+    // برگرداند. اگر نه (اولین بوت دستگاه، یا کاربر از تنظیمات دوباره
+    // درخواست کالیبراسیون داده)، runTouchCalibration() تعاملی را صدا
+    // بزن - این یک بار، قبل از ساخته شدن رابط کاربری اصلی، مسدودکننده
+    // اجرا می‌شود (چون بدون کالیبراسیون معتبر، خود دکمه‌های UI هم قابل
+    // لمس دقیق نیستند - این تنها نقطه‌ای است که مسدود بودن قابل قبول
+    // است).
+    AppConfig* cfg = getConfig();
+    if (cfg->touchCalibrated) {
+        tft.setTouch(cfg->touchCalData);
+        Serial.println("[TFT] کالیبراسیون تاچ ذخیره‌شده اعمال شد");
+    } else {
+        Serial.println("[TFT] کالیبراسیون تاچ یافت نشد - شروع ویزارد کالیبراسیون اولیه...");
+        runTouchCalibration();
+    }
     
     lv_init();
     
@@ -196,6 +232,48 @@ void TFT_UI::begin() {
     
     _initialized = true;
     Serial.println("[TFT] صفحه نمایش با موفقیت مقداردهی شد ✓");
+}
+
+// ======================== کالیبراسیون تاچ‌اسکرین ========================
+// === جدید (چک‌لیست تجاری #9) ===
+//
+// از calibrateTouch() خودِ کتابخانه‌ی TFT_eSPI استفاده می‌کند که یک
+// روال استاندارد و آزموده‌شده‌ی صنعتی است: ۴ گوشه + مرکز صفحه یک‌به‌یک
+// نمایش داده می‌شوند، کاربر هرکدام را لمس می‌کند، و کتابخانه خودش
+// ماتریس تبدیل خام→پیکسل را (با احتساب چرخش TFT_ROTATION فعلی) در
+// calData[5] محاسبه می‌کند. این عدد سپس در NVS ذخیره می‌شود تا در
+// بوت‌های بعدی نیازی به تکرار کالیبراسیون نباشد.
+void TFT_UI::runTouchCalibration() {
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.setTextSize(2);
+    tft.setCursor(20, 20);
+    tft.println("کالیبراسیون لمسی");
+    tft.setTextSize(1);
+    tft.setCursor(20, 60);
+    tft.println("چهار گوشه صفحه که چشمک می‌زنند را لمس کنید");
+
+    uint16_t calData[5];
+    // پارامترها: رنگ کراس‌هیر، رنگ پس‌زمینه، timeout به میلی‌ثانیه (۱۵
+    // ثانیه در هر نقطه - برای کاربری که در ماشین نشسته و ممکن است
+    // دستش پر باشد، زمان کافی).
+    tft.calibrateTouch(calData, TFT_MAGENTA, TFT_BLACK, 15000);
+
+    AppConfig* cfg = getConfig();
+    memcpy(cfg->touchCalData, calData, sizeof(calData));
+    cfg->touchCalibrated = true;
+    saveConfig();
+
+    tft.setTouch(calData);
+
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_GREEN, TFT_BLACK);
+    tft.setCursor(20, 20);
+    tft.println("کالیبراسیون ذخیره شد ✓");
+    delay(1000);  // فقط یک‌بار در بوت/تنظیمات اجرا می‌شود - مسدود بودن اینجا بی‌اثر است
+
+    Serial.printf("[TFT] کالیبراسیون ذخیره شد: {%u,%u,%u,%u,%u}\n",
+                  calData[0], calData[1], calData[2], calData[3], calData[4]);
 }
 
 // ======================== به‌روزرسانی ========================
@@ -395,9 +473,22 @@ void TFT_UI::_buildTabSettings() {
     lv_obj_t* labelPassword = lv_label_create(btnPassword);
     lv_label_set_text(labelPassword, "🔐 تغییر رمز ورود");
     lv_obj_center(labelPassword);
+
+    // === جدید (چک‌لیست تجاری #9: کالیبراسیون واقعی تاچ‌اسکرین) ===
+    // به کاربر اجازه می‌دهد در هر زمان (نه فقط اولین بوت) دوباره
+    // کالیبراسیون را اجرا کند - مثلاً اگر صفحه عوض شد یا دقت لمس کم
+    // شده باشد.
+    lv_obj_t* btnRecalibrate = lv_btn_create(_tabSettings);
+    lv_obj_set_size(btnRecalibrate, 220, 45);
+    lv_obj_set_pos(btnRecalibrate, 10, 230);
+    lv_obj_set_style_bg_color(btnRecalibrate, lv_color_hex(0x3A6EA5), 0);
+    lv_obj_add_event_cb(btnRecalibrate, _btnRecalibrateTouchEventHandler, LV_EVENT_CLICKED, NULL);
+    lv_obj_t* labelRecalibrate = lv_label_create(btnRecalibrate);
+    lv_label_set_text(labelRecalibrate, "🎯 کالیبراسیون مجدد لمس");
+    lv_obj_center(labelRecalibrate);
     
     lv_obj_t* labelInfo = lv_label_create(_tabSettings);
-    lv_obj_set_pos(labelInfo, 10, 230);
+    lv_obj_set_pos(labelInfo, 10, 285);
     lv_label_set_text(labelInfo, 
         "⚠ خودرو باید خاموش باشد\n"
         "قبل از نصب باتری را جدا کنید\n"
@@ -1276,6 +1367,20 @@ void TFT_UI::_btnPasswordSaveEventHandler(lv_event_t* e) {
 void TFT_UI::_btnPasswordCancelEventHandler(lv_event_t* e) {
     if (pThisUI) {
         pThisUI->_closePasswordScreen();
+    }
+}
+
+// === جدید (چک‌لیست تجاری #9) ===
+void TFT_UI::_btnRecalibrateTouchEventHandler(lv_event_t* e) {
+    if (pThisUI) {
+        // توجه: runTouchCalibration() مسدودکننده است (منتظر لمس کاربر
+        // در ۵ نقطه می‌ماند) و مستقیماً روی tft خام کار می‌کند، نه
+        // روی LVGL. بعد از پایان، صفحه‌ی LVGL باید دوباره رسم شود
+        // (چون runTouchCalibration صفحه را با متن ساده پاک/پر کرده)
+        // - lv_obj_invalidate روی صفحه‌ی فعال این کار را انجام می‌دهد.
+        pThisUI->runTouchCalibration();
+        lv_obj_invalidate(lv_scr_act());
+        pThisUI->showNotification("✅ کالیبراسیون لمس به‌روز شد");
     }
 }
 
