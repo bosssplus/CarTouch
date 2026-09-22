@@ -218,6 +218,15 @@ struct AppConfig {
     
     // انرژی
     uint32_t sleepTimeout = AUTO_SLEEP_TIMEOUT;
+
+    // === جدید (چک‌لیست تجاری #9: کالیبراسیون واقعی تاچ‌اسکرین) ===
+    // خروجی calibrateTouch() کتابخانه‌ی TFT_eSPI دقیقاً ۵ مقدار
+    // uint16_t است (calData[5]) که رابطه‌ی بین مختصات خام ADC و
+    // مختصات پیکسل صفحه را مشخص می‌کند. قبلاً این مقادیر هرگز واقعاً
+    // در جایی محاسبه یا ذخیره نمی‌شدند - فقط یک آرایه‌ی ثابت و حدسی
+    // (touchCalibX/Y در tft_ui.cpp) بود که اصلاً استفاده هم نمی‌شد.
+    uint16_t touchCalData[5] = {0, 0, 0, 0, 0};
+    bool touchCalibrated = false;  // false = هنوز کالیبره نشده، اولین بوت باید ویزارد کالیبراسیون نشان دهد
     
     // فلگ اعتبارسنجی (برای اطمینان از ذخیره صحیح)
     uint32_t configMagic = 0xCAFE1234;
@@ -261,5 +270,28 @@ bool isUsingDefaultPassword();
  * @return true در صورت موفقیت
  */
 bool setWebPassword(const char* newUser, const char* newPass);
+
+// === جدید (چک‌لیست تجاری #20: همگام‌سازی session بین TFT و وب) ===
+// مشکل قبلی: setWebPassword از دو مسیر مستقل صدا زده می‌شد - یک بار
+// از webserver.cpp (که خودش بعدش _sessionToken داخلی‌اش را باطل
+// می‌کرد) و یک بار از tft_ui.cpp (که هیچ راهی برای باطل کردن session
+// وب نداشت، چون _sessionToken یک متغیر خصوصی در کلاس دیگری است).
+// نتیجه: اگر کاربر رمز را از صفحه‌ی لمسی عوض می‌کرد، یک session وب
+// که با رمز *قدیمی* لاگین کرده بود همچنان معتبر می‌ماند.
+//
+// راه‌حل: یک نقطه‌ی callback سراسری و اختیاری. هر ماژولی که session
+// نگه می‌دارد (فعلاً فقط WebServerManager) با
+// registerPasswordChangeCallback یک تابع ثبت می‌کند؛ setWebPassword
+// در صورت موفقیت، این callback را صدا می‌زند - از هر مسیری
+// (TFT یا وب) که فراخوانی شده باشد.
+typedef void (*PasswordChangeCallback)();
+
+/**
+ * ثبت یک callback که هر بار setWebPassword موفق شود صدا زده می‌شود.
+ * برای همگام‌سازی session بین رابط‌های مختلف (TFT/وب) استفاده می‌شود.
+ * فقط یک callback همزمان پشتیبانی می‌شود (کافی برای معماری فعلی که
+ * فقط WebServerManager session نگه می‌دارد).
+ */
+void registerPasswordChangeCallback(PasswordChangeCallback cb);
 
 #endif // CONFIG_H
