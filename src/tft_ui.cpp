@@ -23,6 +23,12 @@
 static TFT_eSPI tft = TFT_eSPI();
 static TFT_eSPI* pTft = &tft;
 
+// === اصلاح (باگ کامپایل) ===
+// این اشاره‌گر در نسخه‌ی v1.0 وجود داشت اما در تبدیل به v2.0 حذف شده
+// بود، در حالی که تمام callback های استاتیک این فایل (لمس دکمه‌ها،
+// صفحه‌ی رمز عبور، Learn Wizard و ...) به آن وابسته‌اند.
+static TFT_UI* pThisUI = nullptr;
+
 lv_disp_draw_buf_t TFT_UI::_dispBuf;
 lv_color_t TFT_UI::_buf1[LVGL_BUF_SIZE];
 lv_color_t TFT_UI::_buf2[LVGL_BUF_SIZE];

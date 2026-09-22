@@ -20,7 +20,7 @@
 #include <Arduino.h>
 #include <SPIFFS.h>
 #include <esp_task_wdt.h>
-#include <esp_attr.h>   // برای EXT_RAM_BSS_ATTR (قرار دادن vehicleDB در PSRAM)
+#include <esp_attr.h>   // برای EXT_RAM_ATTR/EXT_RAM_BSS_ATTR (قرار دادن vehicleDB در PSRAM)
 
 #include "config.h"
 #include "can_manager.h"
@@ -59,7 +59,21 @@ OBD2Reader obd2Reader(canManager);
 // کنید تا مطمئن شوید آبجکت واقعاً در PSRAM نشسته و نه اینکه لینکر
 // بی‌صدا آن را در DRAM گذاشته (در تنظیمات نادرست PSRAM چنین چیزی
 // ممکن است رخ دهد).
-EXT_RAM_BSS_ATTR VehicleDB vehicleDB;
+//
+// === اصلاح (باگ کامپایل) ===
+// EXT_RAM_BSS_ATTR در نسخه‌ی esp_attr.h این زنجیره‌ی ابزار (ESP-IDF
+// قدیمی‌تر که Arduino-ESP32 از آن استفاده می‌کند) اصلاً وجود ندارد؛
+// فقط EXT_RAM_ATTR تعریف شده. یک ماکروی سازگار با هر دو نسخه تعریف
+// می‌کنیم تا روی هر دو نسخه‌ی core (۲.x و ۳.x) کامپایل شود.
+#if defined(EXT_RAM_BSS_ATTR)
+#define CARTOUCH_PSRAM_BSS_ATTR EXT_RAM_BSS_ATTR
+#elif defined(EXT_RAM_ATTR)
+#define CARTOUCH_PSRAM_BSS_ATTR EXT_RAM_ATTR
+#else
+#define CARTOUCH_PSRAM_BSS_ATTR
+#endif
+
+CARTOUCH_PSRAM_BSS_ATTR VehicleDB vehicleDB;
 
 // === جدید v2.0: ذخیره‌سازی پروفایل‌های سفارشی + موتور یادگیری ===
 CustomVehicleStore customVehicleStore;
@@ -119,12 +133,22 @@ void setup() {
     // داده شود. esp_task_wdt_add بدون آرگومان، تسک جاری (loopTask
     // آردوینو) را ثبت می‌کند.
     {
+        // === اصلاح (باگ کامپایل) ===
+        // esp_task_wdt_config_t (API مبتنی بر ساختار) فقط در
+        // Arduino-ESP32 3.x (ESP-IDF 5.x) وجود دارد. زنجیره‌ی ابزار
+        // فعلی از هسته‌ی 2.x استفاده می‌کند که امضای قدیمی‌تر
+        // esp_task_wdt_init(timeout_s, panic) را دارد. با شرط‌گذاری
+        // روی نسخه، کد روی هر دو نسخه‌ی core کامپایل می‌شود.
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
         esp_task_wdt_config_t wdtConfig = {
             .timeout_ms = WDT_TIMEOUT_S * 1000,
             .idle_core_mask = 0,
             .trigger_panic = true
         };
         esp_task_wdt_init(&wdtConfig);
+#else
+        esp_task_wdt_init(WDT_TIMEOUT_S, true);
+#endif
         esp_task_wdt_add(NULL);
         Serial.printf("[INIT] Watchdog فعال شد (timeout: %ds)\n", WDT_TIMEOUT_S);
     }
