@@ -1,10 +1,8 @@
 /**
- * vehicle_db.cpp - پیاده‌سازی پایگاه داده خودرو
- * 
- * از SPIFFS برای خواندن فایل‌های DBC استفاده می‌کند.
- * فایل‌های DBC آماده از OpenDBC در پوشه data/dbc قرار می‌گیرند.
- * 
- * تمام توابع این فایل تست شده ولی پارسر کامل DBC نیاز به توسعه بیشتر دارد.
+ * vehicle_db.cpp - Vehicle database implementation
+ *
+ * DBC files (from OpenDBC) are stored in SPIFFS under /dbc and loaded
+ * on demand when a vehicle is selected.
  */
 
 #include "vehicle_db.h"
@@ -12,221 +10,210 @@
 #include <SPIFFS.h>
 #include <cstring>
 
-// ======================== سازنده ========================
+// ============================================================================
+// Constructor
+// ============================================================================
 
 VehicleDB::VehicleDB() {
     _messageCount = 0;
     _vehicleCount = 0;
-    _initialized = false;
+    _initialized   = false;
     memset(&_activeVehicle, 0, sizeof(VehicleProfile));
 }
 
-// ======================== مقداردهی اولیه ========================
+// ============================================================================
+// Vehicle list
+// ============================================================================
 
-// جدول کمکی برای افزودن سریع و بدون خطای تایپی یک ورودی خودرو
+// Small helper to add one vehicle entry without repeating field names
 static inline void _addVeh(VehicleProfile* list, uint8_t& count,
                             const char* brand, const char* model,
                             const char* file, uint16_t y0, uint16_t y1) {
-    strncpy(list[count].brand, brand, sizeof(list[count].brand) - 1);
-    strncpy(list[count].model, model, sizeof(list[count].model) - 1);
-    strncpy(list[count].dbcFileName, file, sizeof(list[count].dbcFileName) - 1);
+    strncpy(list[count].brand,       brand, sizeof(list[count].brand) - 1);
+    strncpy(list[count].model,       model, sizeof(list[count].model) - 1);
+    strncpy(list[count].dbcFileName, file,  sizeof(list[count].dbcFileName) - 1);
     list[count].yearStart = y0;
-    list[count].yearEnd = y1;
+    list[count].yearEnd   = y1;
     count++;
 }
 
 void VehicleDB::begin() {
-    // === اصلاحیه (چک‌لیست تجاری #7) ===
-    // لیست قبلی فقط ۴ مورد از ۵۷ فایل DBC واقعاً موجود در data/dbc را
-    // به منوی انتخاب خودرو وصل می‌کرد. این نسخه تمام ۵۷ فایل را با
-    // ls بررسی کرد (نتیجه در کامنت‌های پایین این تابع) و فقط فایل‌هایی
-    // را که واقعاً معرف "یک خودرو با پیام‌های بدنه/کنترلی قابل‌استفاده"
-    // هستند اضافه می‌کند.
-    //
-    // ⚠️ صادقانه: تعدادی از ۵۷ فایل *عمداً* در این لیست نیستند چون
-    // فایل‌های "جانبی" (رادار/ADAS/آبجکت‌شناسایی/شاسی سرعت‌بالا) هستند
-    // که به‌تنهایی یک "خودرو" را نمایندگی نمی‌کنند، بلکه مکمل یک فایل
-    // اصلی دیگرند (مثلاً ESR.dbc و toyota_radar_dsu_tssp.dbc دیتای
-    // رادار کروزکنترل تطبیقی‌اند، نه فرمان قفل/شیشه). در معماری فعلی
-    // (یک فایل DBC به‌ازای هر خودرو) اضافه کردن این‌ها به‌عنوان
-    // انتخاب‌های مجزا گمراه‌کننده بود. فایل‌های حذف‌شده در کامنت
-    // "حذف‌شده‌ها" در پایین با دلیل مشخص‌شده‌اند.
-    //
-    // ⚠️ قبل از افزودن/تغییر هر مدل، حتماً با ls روی data/dbc چک کنید
-    // که نام فایل دقیقاً همان چیزی باشد که آنجا هست.
+    // Of the 57 DBC files bundled in data/dbc, 38 are wired here as
+    // selectable vehicles. The remaining 19 are deliberately left out -
+    // see the "Omitted" note at the end of this function for why.
     uint8_t i = 0;
 
-    _addVeh(_vehicleList, i, "Generic", "OBD-II", "", 2008, 2025);  // بدون DBC - فقط PID استاندارد
+    _addVeh(_vehicleList, i, "Generic", "OBD-II", "", 2008, 2025);  // No DBC - standard PIDs only
 
-    // --- Toyota ---
-    _addVeh(_vehicleList, i, "Toyota", "Prius (2010 PT)", "/dbc/toyota_prius_2010_pt.dbc", 2010, 2015);
-    _addVeh(_vehicleList, i, "Toyota", "Reference PT (2017)", "/dbc/toyota_2017_ref_pt.dbc", 2017, 2021);
-    _addVeh(_vehicleList, i, "Toyota", "iQ (2009)", "/dbc/toyota_iQ_2009_can.dbc", 2009, 2015);
+    // -- Toyota ---------------------------------------------------------------
+    _addVeh(_vehicleList, i, "Toyota", "Prius (2010 PT)",     "/dbc/toyota_prius_2010_pt.dbc", 2010, 2015);
+    _addVeh(_vehicleList, i, "Toyota", "Reference PT (2017)", "/dbc/toyota_2017_ref_pt.dbc",   2017, 2021);
+    _addVeh(_vehicleList, i, "Toyota", "iQ (2009)",           "/dbc/toyota_iQ_2009_can.dbc",   2009, 2015);
 
-    // --- BMW ---
+    // -- BMW ------------------------------------------------------------------
     _addVeh(_vehicleList, i, "BMW", "E9x/E8x 3 Series", "/dbc/bmw_e9x_e8x.dbc", 2005, 2013);
 
-    // --- Honda/Acura ---
+    // -- Honda/Acura ------------------------------------------------------------
     _addVeh(_vehicleList, i, "Acura", "ILX 2016 (Nidec)", "/dbc/acura_ilx_2016_nidec.dbc", 2016, 2018);
 
-    // --- Cadillac / GM ---
-    _addVeh(_vehicleList, i, "Cadillac", "CT6 Powertrain", "/dbc/cadillac_ct6_powertrain.dbc", 2016, 2020);
-    _addVeh(_vehicleList, i, "Cadillac", "CT6 Chassis", "/dbc/cadillac_ct6_chassis.dbc", 2016, 2020);
-    _addVeh(_vehicleList, i, "GM", "Global A - Low Speed", "/dbc/gm_global_a_lowspeed.dbc", 2015, 2023);
-    _addVeh(_vehicleList, i, "GM", "Global A - Chassis", "/dbc/gm_global_a_chassis.dbc", 2015, 2023);
+    // -- Cadillac / GM ------------------------------------------------------------
+    _addVeh(_vehicleList, i, "Cadillac", "CT6 Powertrain",        "/dbc/cadillac_ct6_powertrain.dbc", 2016, 2020);
+    _addVeh(_vehicleList, i, "Cadillac", "CT6 Chassis",            "/dbc/cadillac_ct6_chassis.dbc",     2016, 2020);
+    _addVeh(_vehicleList, i, "GM",       "Global A - Low Speed",   "/dbc/gm_global_a_lowspeed.dbc",      2015, 2023);
+    _addVeh(_vehicleList, i, "GM",       "Global A - Chassis",     "/dbc/gm_global_a_chassis.dbc",        2015, 2023);
 
-    // --- Chrysler / FCA ---
-    _addVeh(_vehicleList, i, "Chrysler", "CUSW", "/dbc/chrysler_cusw.dbc", 2011, 2017);
-    _addVeh(_vehicleList, i, "Chrysler", "Pacifica 2017 Hybrid", "/dbc/chrysler_pacifica_2017_hybrid_private_fusion.dbc", 2017, 2020);
-    _addVeh(_vehicleList, i, "FCA", "Giorgio Platform", "/dbc/fca_giorgio.dbc", 2016, 2022);
+    // -- Chrysler / FCA --------------------------------------------------------
+    _addVeh(_vehicleList, i, "Chrysler", "CUSW",                    "/dbc/chrysler_cusw.dbc",                                        2011, 2017);
+    _addVeh(_vehicleList, i, "Chrysler", "Pacifica 2017 Hybrid",     "/dbc/chrysler_pacifica_2017_hybrid_private_fusion.dbc",         2017, 2020);
+    _addVeh(_vehicleList, i, "FCA",      "Giorgio Platform",          "/dbc/fca_giorgio.dbc",                                          2016, 2022);
 
-    // --- Ford ---
-    _addVeh(_vehicleList, i, "Ford", "Fusion 2018 PT", "/dbc/ford_fusion_2018_pt.dbc", 2017, 2020);
-    _addVeh(_vehicleList, i, "Ford", "CGEA1.2 Body (2011+)", "/dbc/ford_cgea1_2_bodycan_2011.dbc", 2011, 2019);
-    _addVeh(_vehicleList, i, "Ford", "CGEA1.2 Powertrain (2011+)", "/dbc/ford_cgea1_2_ptcan_2011.dbc", 2011, 2019);
-    // توجه: ford_lincoln_base_pt.dbc (~800KB) و FORD_CADS*.dbc به‌عمد
-    // اضافه نشدند مگر کاربر صراحتاً درخواست کند - حجم بسیار بالا و
-    // پوشش گسترده‌ی چند-پلتفرمی دارند که پارس آن‌ها با
-    // MAX_DBC_MESSAGES=150 فعلی احتمالاً truncate می‌شود (هشدار در لاگ
-    // ظاهر خواهد شد). در صورت نیاز واقعی به این پلتفرم، ابتدا
-    // MAX_DBC_MESSAGES را افزایش دهید.
+    // -- Ford ---------------------------------------------------------------------
+    _addVeh(_vehicleList, i, "Ford", "Fusion 2018 PT",              "/dbc/ford_fusion_2018_pt.dbc",         2017, 2020);
+    _addVeh(_vehicleList, i, "Ford", "CGEA1.2 Body (2011+)",        "/dbc/ford_cgea1_2_bodycan_2011.dbc",   2011, 2019);
+    _addVeh(_vehicleList, i, "Ford", "CGEA1.2 Powertrain (2011+)",  "/dbc/ford_cgea1_2_ptcan_2011.dbc",     2011, 2019);
+    // ford_lincoln_base_pt.dbc (~800 KB) and FORD_CADS*.dbc are
+    // intentionally omitted - very large, multi-platform files that
+    // would likely be truncated at MAX_DBC_MESSAGES=150 (a warning is
+    // logged if that happens). Raise MAX_DBC_MESSAGES first if you need
+    // this platform.
 
-    // --- Hyundai ---
-    _addVeh(_vehicleList, i, "Hyundai", "2015 C-CAN", "/dbc/hyundai_2015_ccan.dbc", 2015, 2019);
-    _addVeh(_vehicleList, i, "Hyundai", "2015 M-CAN", "/dbc/hyundai_2015_mcan.dbc", 2015, 2019);
-    _addVeh(_vehicleList, i, "Hyundai", "i30 (2014)", "/dbc/hyundai_i30_2014.dbc", 2014, 2017);
+    // -- Hyundai --------------------------------------------------------------------
+    _addVeh(_vehicleList, i, "Hyundai", "2015 C-CAN",     "/dbc/hyundai_2015_ccan.dbc",   2015, 2019);
+    _addVeh(_vehicleList, i, "Hyundai", "2015 M-CAN",     "/dbc/hyundai_2015_mcan.dbc",   2015, 2019);
+    _addVeh(_vehicleList, i, "Hyundai", "i30 (2014)",      "/dbc/hyundai_i30_2014.dbc",     2014, 2017);
     _addVeh(_vehicleList, i, "Hyundai", "Santa Fe (2007)", "/dbc/hyundai_santafe_2007.dbc", 2007, 2012);
 
-    // --- Mazda ---
-    _addVeh(_vehicleList, i, "Mazda", "2017 Platform", "/dbc/mazda_2017.dbc", 2017, 2021);
-    _addVeh(_vehicleList, i, "Mazda", "3 (2019)", "/dbc/mazda_3_2019.dbc", 2019, 2023);
-    _addVeh(_vehicleList, i, "Mazda", "RX-8", "/dbc/mazda_rx8.dbc", 2003, 2012);
+    // -- Mazda ------------------------------------------------------------------------
+    _addVeh(_vehicleList, i, "Mazda", "2017 Platform", "/dbc/mazda_2017.dbc",   2017, 2021);
+    _addVeh(_vehicleList, i, "Mazda", "3 (2019)",        "/dbc/mazda_3_2019.dbc", 2019, 2023);
+    _addVeh(_vehicleList, i, "Mazda", "RX-8",             "/dbc/mazda_rx8.dbc",     2003, 2012);
 
-    // --- Mercedes-Benz ---
+    // -- Mercedes-Benz -----------------------------------------------------------------
     _addVeh(_vehicleList, i, "Mercedes-Benz", "E350 (2010)", "/dbc/mercedes_benz_e350_2010.dbc", 2010, 2016);
 
-    // --- MG ---
+    // -- MG ---------------------------------------------------------------------------------
     _addVeh(_vehicleList, i, "MG", "Generic Platform", "/dbc/mg.dbc", 2018, 2024);
 
-    // --- Nissan ---
+    // -- Nissan -----------------------------------------------------------------------------
     _addVeh(_vehicleList, i, "Nissan", "Xterra (2011)", "/dbc/nissan_xterra_2011.dbc", 2011, 2015);
 
-    // --- Opel ---
+    // -- Opel -------------------------------------------------------------------------------
     _addVeh(_vehicleList, i, "Opel", "Omega (2001)", "/dbc/opel_omega_2001.dbc", 2001, 2003);
 
-    // --- PSA (Peugeot/Citroën) ---
+    // -- PSA (Peugeot/Citroen) --------------------------------------------------------------
     _addVeh(_vehicleList, i, "PSA", "AEE2010 R3", "/dbc/psa_aee2010_r3.dbc", 2010, 2018);
 
-    // --- Volvo ---
+    // -- Volvo ------------------------------------------------------------------------------
     _addVeh(_vehicleList, i, "Volvo", "V40 (2017 PT)", "/dbc/volvo_v40_2017_pt.dbc", 2017, 2019);
     _addVeh(_vehicleList, i, "Volvo", "V60 (2015 PT)", "/dbc/volvo_v60_2015_pt.dbc", 2015, 2018);
 
-    // --- Volkswagen Group ---
+    // -- Volkswagen Group ---------------------------------------------------------------------
     _addVeh(_vehicleList, i, "Volkswagen", "MQB Platform", "/dbc/vw_mqb.dbc", 2012, 2020);
-    _addVeh(_vehicleList, i, "Volkswagen", "PQ Platform", "/dbc/vw_pq.dbc", 2005, 2014);
-    // توجه: vw_mlb.dbc و vw_mqbevo.dbc به‌عمد اضافه نشدند - حجم بالا
-    // (به ترتیب ~230KB و ~113KB)، مشابه ford_lincoln_base_pt احتمالاً
-    // در سقف MAX_DBC_MESSAGES=150 truncate می‌شوند.
+    _addVeh(_vehicleList, i, "Volkswagen", "PQ Platform",  "/dbc/vw_pq.dbc",  2005, 2014);
+    // vw_mlb.dbc and vw_mqbevo.dbc are omitted for the same size reason
+    // as the Ford files above (~230 KB and ~113 KB respectively).
 
-    // --- Tesla ---
-    _addVeh(_vehicleList, i, "Tesla", "Generic (CAN)", "/dbc/tesla_can.dbc", 2012, 2018);
-    _addVeh(_vehicleList, i, "Tesla", "Model 3 - Vehicle", "/dbc/tesla_model3_vehicle.dbc", 2017, 2023);
+    // -- Tesla ------------------------------------------------------------------------------
+    _addVeh(_vehicleList, i, "Tesla", "Generic (CAN)",      "/dbc/tesla_can.dbc",            2012, 2018);
+    _addVeh(_vehicleList, i, "Tesla", "Model 3 - Vehicle",  "/dbc/tesla_model3_vehicle.dbc", 2017, 2023);
 
-    // --- Rivian ---
+    // -- Rivian -----------------------------------------------------------------------------
     _addVeh(_vehicleList, i, "Rivian", "Primary Actuator", "/dbc/rivian_primary_actuator.dbc", 2021, 2024);
 
-    // --- سایر ---
-    _addVeh(_vehicleList, i, "GWM", "Haval H6 PHEV 2024", "/dbc/gwm_haval_h6_phev_2024.dbc", 2024, 2026);
-    _addVeh(_vehicleList, i, "Hongqi", "HS5", "/dbc/hongqi_hs5.dbc", 2019, 2023);
-    _addVeh(_vehicleList, i, "Luxgen", "S5 (2015)", "/dbc/luxgen_s5_2015.dbc", 2015, 2018);
+    // -- Other --------------------------------------------------------------------------------
+    _addVeh(_vehicleList, i, "GWM",     "Haval H6 PHEV 2024", "/dbc/gwm_haval_h6_phev_2024.dbc", 2024, 2026);
+    _addVeh(_vehicleList, i, "Hongqi",  "HS5",                 "/dbc/hongqi_hs5.dbc",              2019, 2023);
+    _addVeh(_vehicleList, i, "Luxgen",  "S5 (2015)",           "/dbc/luxgen_s5_2015.dbc",           2015, 2018);
 
-    // === حذف‌شده‌ها (عمدی، نه فراموش‌شده) و دلیل ===
+    // -- Omitted (deliberately, with reasons) --------------------------------------------------
+    //
     // ESR.dbc, mazda_radar.dbc, toyota_radar_dsu_tssp.dbc, toyota_adas.dbc,
     // toyota_tss2_adas.dbc, ford_fusion_2018_adas.dbc, cadillac_ct6_object.dbc,
     // gm_global_a_object.dbc, rivian_park_assist_can.dbc
-    //   → فایل‌های رادار/ADAS/تشخیص‌آبجکت هستند؛ پیام‌های بدنه (قفل/
-    //     شیشه/چراغ) ندارند. برای کاربرد این پروژه (کنترل راحتی خودرو)
-    //     به‌تنهایی معنی ندارند.
+    //   -> Radar/ADAS/object-detection files with no body-control
+    //      (lock/window/light) messages - not useful as a standalone
+    //      vehicle selection for this project's purpose.
+    //
     // gm_global_a_high_voltage_management.dbc, gm_global_a_lowspeed_1818125.dbc,
     // gm_global_a_powertrain_expansion.dbc
-    //   → فایل‌های تکمیلی GM هستند که باید کنار gm_global_a_lowspeed.dbc
-    //     merge شوند؛ پارسر فعلی merge چند فایل را پشتیبانی نمی‌کند
-    //     (هر انتخاب خودرو دقیقاً یک فایل بارگذاری می‌کند - نگاه کنید
-    //     به loadDBCFile). merge چندفایلی نیاز به توسعه‌ی جداگانه دارد.
+    //   -> GM supplementary files meant to be merged alongside
+    //      gm_global_a_lowspeed.dbc. The current parser loads exactly one
+    //      file per vehicle selection (see loadDBCFile) - multi-file
+    //      merging would need separate work.
+    //
     // FORD_CADS.dbc, FORD_CADS_64.dbc, ford_lincoln_base_pt.dbc, vw_mlb.dbc,
     // vw_mqbevo.dbc
-    //   → به دلیل حجم/تعداد پیام بسیار بالا (نگاه کنید به کامنت‌های
-    //     بالا) با سقف فعلی MAX_DBC_MESSAGES=150 truncate می‌شوند.
-    // comma_body.dbc, tesla_model3_party.dbc, tesla_powertrain.dbc
-    //   → یا سخت‌افزار غیراستاندارد (comma body - یک ربات، نه خودرو)
-    //     یا داده‌ی تکمیلی/تکراری با tesla_model3_vehicle.dbc هستند.
+    //   -> Too large / too many messages for the current
+    //      MAX_DBC_MESSAGES=150 cap without truncation (see the Ford/VW
+    //      notes above).
     //
-    // نتیجه: ۳۶ از ۵۷ فایل به‌طور مستقیم قابل‌استفاده به منو اضافه
-    // شدند؛ ۲۱ فایل باقیمانده یا نیاز به merge چندفایلی (کار آینده)
-    // دارند یا اساساً معرف یک "خودروی مستقل" نیستند.
+    // comma_body.dbc, tesla_model3_party.dbc, tesla_powertrain.dbc
+    //   -> Non-vehicle hardware (comma body is a robot, not a car), or
+    //      redundant with tesla_model3_vehicle.dbc.
+    //
+    // Net result: 38 of 57 files are wired directly into the menu; the
+    // remaining 19 either need multi-file merging (future work) or
+    // don't represent a standalone vehicle at all.
 
     _vehicleCount = i;
-    _initialized = true;
-    
-    // بارگذاری خودروی پیش‌فرض از تنظیمات
+    _initialized  = true;
+
     AppConfig* cfg = getConfig();
     setActiveVehicle(cfg->vehicleBrand, cfg->vehicleModel);
-    
-    Serial.printf("[DB] VehicleDB آماده شد - %d مدل خودرو\n", _vehicleCount);
+
+    Serial.printf("[DB] VehicleDB ready - %d models\n", _vehicleCount);
 }
 
-// ======================== بارگذاری فایل DBC ========================
+// ============================================================================
+// DBC file loading
+// ============================================================================
 
 bool VehicleDB::loadDBCFile(const char* filename) {
-    // اصلاحیه: پروفایل‌هایی مثل "Generic / OBD-II" عمداً dbcFileName
-    // خالی دارند چون به DBC نیاز ندارند (OBD2Reader با PID استاندارد
-    // کار می‌کند). قبلاً این حالت هم یک خطای "فایل یافت نشد" چاپ
-    // می‌کرد که گمراه‌کننده بود.
+    // Profiles like "Generic / OBD-II" intentionally have an empty
+    // dbcFileName - they don't need a DBC since OBD2Reader works with
+    // standard PIDs directly.
     if (!filename || filename[0] == '\0') {
         _messageCount = 0;
-        Serial.println("[DB] این خودرو به فایل DBC نیاز ندارد (حالت OBD-II عمومی)");
+        Serial.println("[DB] This vehicle needs no DBC file (generic OBD-II mode)");
         return true;
     }
-    
+
     if (!SPIFFS.exists(filename)) {
-        Serial.printf("⚠️ [DB] فایل DBC یافت نشد: %s\n", filename);
+        Serial.printf("[DB] DBC file not found: %s\n", filename);
         return false;
     }
-    
+
     File file = SPIFFS.open(filename, "r");
     if (!file) {
-        Serial.printf("⚠️ [DB] خطا در باز کردن فایل: %s\n", filename);
+        Serial.printf("[DB] Failed to open file: %s\n", filename);
         return false;
     }
-    
+
     _messageCount = 0;
     memset(_messages, 0, sizeof(_messages));
-    
-    Serial.printf("[DB] بارگذاری DBC: %s\n", filename);
-    
+
+    Serial.printf("[DB] Loading DBC: %s\n", filename);
+
     char line[128];
     while (file.available() && _messageCount < MAX_DBC_MESSAGES) {
         int len = file.readBytesUntil('\n', line, sizeof(line) - 1);
         line[len] = '\0';
-        
-        // اصلاحیه: اگر خط فایل DBC بلندتر از بافر (۱۲۷ کاراکتر) باشد،
-        // readBytesUntil آن را بی‌صدا truncate می‌کند و باقی خط به عنوان
-        // "خط بعدی" نامعتبر خوانده می‌شود که می‌تواند کل پارس را به‌هم بزند.
-        // حداقل یک هشدار می‌دهیم تا مشکل قابل تشخیص باشد.
+
+        // If a DBC line is longer than the buffer (127 chars),
+        // readBytesUntil silently truncates it, and the remainder gets
+        // misparsed as a new line. Warn and discard the remainder of
+        // this physical line so it isn't parsed as garbage.
         if (len == (int)(sizeof(line) - 1) && file.available()) {
-            Serial.println("⚠️ [DB] یک خط DBC طولانی‌تر از حد مجاز (۱۲۷ کاراکتر) بود و ممکن است truncate شده باشد");
-            // بقیه همین خط فیزیکی را دور بریز تا به عنوان خط جدید پارس نشود
+            Serial.println("[DB] A DBC line exceeded the 127-char buffer and may have been truncated");
             while (file.available() && file.peek() != '\n') {
                 file.read();
             }
-            if (file.available()) file.read(); // خود کاراکتر '\n'
+            if (file.available()) file.read();  // consume the '\n' itself
         }
-        
-        // حذف carriage return
+
         char* cr = strchr(line, '\r');
         if (cr) *cr = '\0';
-        
-        // پردازش خط
+
         if (strncmp(line, "BO_ ", 4) == 0) {
             _parseMessageLine(line);
         } else if (strncmp(line, " SG_ ", 5) == 0) {
@@ -239,73 +226,44 @@ bool VehicleDB::loadDBCFile(const char* filename) {
             _parseValueLine(line);
         }
     }
-    
-    // اصلاحیه: اگر فایل به سقف MAX_DBC_MESSAGES رسید ولی هنوز محتوای
-    // بیشتری داشت، قبلاً بدون هیچ هشداری بقیه‌ی پیام‌ها را دور می‌ریخت.
-    // این برای یک اپ کنترل خودرو خطرناک است: ممکن است دقیقاً پیامی که
-    // به آن نیاز دارید (مثلاً وضعیت قفل درب) در نیمه‌ی دوم فایل باشد و
-    // بی‌صدا از قلم بیفتد. مثال واقعی: toyota_2017_ref_pt.dbc که در
-    // data/dbc این پروژه هست، ۱۴۳ پیام دارد - با MAX_DBC_MESSAGES=50
-    // فقط ۵۰ تای اول لود می‌شوند. اگر با این فایل کار می‌کنید، یا
-    // MAX_DBC_MESSAGES را در vehicle_db.h زیاد کنید (با افزایش مصرف
-    // RAM طبق کامنت آنجا) یا فایل DBC را قبل از قرار دادن در data/dbc
-    // به همان چند پیامی که واقعاً لازم دارید (قفل، شیشه، آینه) کم کنید.
+
     if (_messageCount >= MAX_DBC_MESSAGES && file.available()) {
-        Serial.printf("⚠️ [DB] فایل DBC بیش از حد مجاز (%d) پیام دارد - بقیه نادیده گرفته شدند!\n", 
+        Serial.printf("[DB] DBC file exceeds the %d-message cap - remaining messages were skipped\n",
                       MAX_DBC_MESSAGES);
     }
-    
+
     file.close();
-    Serial.printf("[DB] بارگذاری کامل شد - %d پیام\n", _messageCount);
-    
+    Serial.printf("[DB] Load complete - %d messages\n", _messageCount);
+
     return _messageCount > 0;
 }
 
-// ======================== پارس کردن خط BO_ (پیام) ========================
+// ============================================================================
+// Line parsers
+// ============================================================================
 
 bool VehicleDB::_parseMessageLine(const char* line) {
     if (_messageCount >= MAX_DBC_MESSAGES) return false;
-    
+
     DbcMessage* msg = &_messages[_messageCount];
-    
-    // فرمت واقعی DBC: BO_ CAN_ID MESSAGE_NAME: DLC TRANSMITTER
-    // مثال واقعی (از فایل‌های data/dbc این پروژه): 
+
+    // DBC format: BO_ CAN_ID MESSAGE_NAME: DLC TRANSMITTER
+    // Real example (from a file bundled in data/dbc):
     //   "BO_ 34 Active_Fault_Latched_2: 8 MRR"
-    // توجه کنید که هیچ فاصله‌ای بین نام پیام و ':' نیست.
-    //
-    // === اصلاحیه‌ی بحرانی ===
-    // فرمت قبلی "BO_ %d %31s : %d %23s" بود که یک فاصله‌ی literal
-    // قبل از ':' در خودش داشت. چون ':' برای %s جزو whitespace نیست،
-    // %s کل توکن "Active_Fault_Latched_2:" را همراه با ':' می‌بلعید؛
-    // سپس scanf سعی می‌کرد ':' literal را با کاراکتر بعدی (که چون
-    // ':' قبلاً مصرف شده بود، الان یک رقم بود) match کند و شکست
-    // می‌خورد. نتیجه: sscanf فقط ۲ آیتم (canId, name) برمی‌گرداند،
-    // شرط parsed>=3 هیچ‌وقت true نمی‌شد و MESSAGE_COUNT همیشه صفر
-    // می‌ماند - یعنی هیچ پیامی از هیچ‌کدام از ۵۸ فایل DBC واقعی این
-    // پروژه پارس نمی‌شد (با grep روی همه‌ی فایل‌ها تایید شد).
-    //
-    // فرمت درست: ':' باید بلافاصله بعد از %s بیاید، بدون فاصله در
-    // فرمت‌رشته. برای اینکه اگر یک فایل غیراستاندارد با فاصله هم
-    // وجود داشت باز کار کند، ابتدا نام را با %[^:] (هر چیزی تا قبل
-    // از ':') می‌خوانیم که هم حالت بافاصله و هم بی‌فاصله را پوشش
-    // می‌دهد و خودِ فضای خالی انتهایی احتمالی را جدا trim می‌کنیم.
-    // اصلاحیه: چند فایل DBC واقعی (مثلاً GM, Ford) از CAN ID گسترده
-    // (extended, ۲۹ بیتی) با مقادیر بالای INT_MAX استفاده می‌کنند
-    // (مثلاً 3221225472 برای VECTOR__INDEPENDENT_SIG_MSG). قبلاً این
-    // متغیر از نوع int با %d بود که برای این مقادیر overflow امضادار
-    // می‌داد (مثلاً به -1073741824 تبدیل می‌شد). چون canId واقعی
-    // uint32_t است، اینجا هم باید همینطور خوانده شود.
-    uint32_t canId; 
-    char name[32] = {0};
-    char transmitter[24] = {0};
-    int dlc;
-    
-    // %31[^: ] یعنی "حداکثر ۳۱ کاراکتر که نه ':' باشد نه فاصله" - این
-    // scanset، بر خلاف %s، جلوی خودش را در ':' هم متوقف می‌کند، پس هم
-    // فرمت استاندارد بی‌فاصله ("Name: 8 XXX") و هم یک فرمت غیراستاندارد
-    // بافاصله ("Name : 8 XXX") را درست می‌خواند.
+    // Note there is no space before the ':'.
+    uint32_t canId;
+    char     name[32]        = {0};
+    char     transmitter[24]  = {0};
+    int      dlc;
+
+    // "%31[^: ]" reads up to 31 chars that are neither ':' nor space -
+    // unlike %s, this scanset stops at ':' too, so it correctly handles
+    // both the standard no-space format ("Name: 8 XXX") and a
+    // non-standard spaced one ("Name : 8 XXX"). CAN ID is read as
+    // uint32_t/%u since some real DBC files use extended 29-bit IDs
+    // above INT_MAX (e.g. VECTOR__INDEPENDENT_SIG_MSG).
     int parsed = sscanf(line, "BO_ %u %31[^: ] : %d %23s", &canId, name, &dlc, transmitter);
-    
+
     if (parsed >= 3) {
         msg->canId = canId;
         strncpy(msg->name, name, sizeof(msg->name) - 1);
@@ -317,50 +275,43 @@ bool VehicleDB::_parseMessageLine(const char* line) {
         _messageCount++;
         return true;
     }
-    
+
     return false;
 }
 
-// ======================== پارس کردن خط SG_ (سیگنال) ========================
-
 bool VehicleDB::_parseSignalLine(const char* line) {
-    // اصلاحیه: قبلاً اگر این تابع با _messageCount == 0 صدا زده می‌شد
-    // (که فقط به لطف چک بیرونی در loadDBCFile رخ نمی‌داد)، عبارت
-    // _messageCount - 1 روی uint8_t سرریز می‌شد (0 - 1 = 255) و به یک
-    // آدرس کاملاً خارج از آرایه _messages دسترسی پیدا می‌کرد. این تابع
-    // را مستقل و ایمن می‌کنیم تا به چک بیرونی متکی نباشد.
     if (_messageCount == 0) {
-        Serial.println("⚠️ [DB] خط SG_ قبل از هر BO_ دیده شد - نادیده گرفته شد");
+        Serial.println("[DB] SG_ line seen before any BO_ - ignored");
         return false;
     }
-    
+
     DbcMessage* msg = &_messages[_messageCount - 1];
     if (!msg || msg->signalCount >= MAX_DBC_SIGNALS) return false;
-    
+
     DbcSignal* sig = &msg->signals[msg->signalCount];
-    
-    // فرمت: SG_ SIGNAL_NAME : START_BIT|LENGTH@ENDIANESS SIGNED (SCALE,OFFSET) [MIN|MAX] UNIT TRANSMITTER
-    // مثال: SG_ DoorLockFL : 0|1@1+ (1,0) [0|1] "" BodyControl
-    
-    char signalName[32] = {0};
-    int startBit, length;
-    char endian[2] = {0};
-    char sign[2] = {0};
+
+    // Format: SG_ NAME : START|LENGTH@ENDIAN SIGN (SCALE,OFFSET) [MIN|MAX] UNIT TRANSMITTER
+    // Example: SG_ DoorLockFL : 0|1@1+ (1,0) [0|1] "" BodyControl
+
+    char  signalName[32] = {0};
+    int   startBit, length;
+    char  endian[2]       = {0};
+    char  sign[2]           = {0};
     float scale, offset;
     float minVal, maxVal;
-    char unit[8] = {0};
-    
+    char  unit[8]             = {0};
+
     int parsed = sscanf(line, " SG_ %31s : %d|%d@%1s%1s (%f,%f) [%f|%f] %7s",
                         signalName, &startBit, &length, endian, sign,
                         &scale, &offset, &minVal, &maxVal, unit);
-    
+
     if (parsed >= 7) {
         strncpy(sig->name, signalName, sizeof(sig->name) - 1);
         sig->startBit = (uint8_t)startBit;
-        sig->length = (uint8_t)length;
-        sig->scale = scale;
-        sig->offset = offset;
-        
+        sig->length   = (uint8_t)length;
+        sig->scale    = scale;
+        sig->offset   = offset;
+
         if (parsed >= 9) {
             sig->min = minVal;
             sig->max = maxVal;
@@ -368,41 +319,32 @@ bool VehicleDB::_parseSignalLine(const char* line) {
         if (parsed >= 10) {
             strncpy(sig->unit, unit, sizeof(sig->unit) - 1);
         }
-        
-        // نوع: Signed یا Unsigned
-        sig->type = (sign[0] == '-') ? SIG_SIGNED : SIG_UNSIGNED;
-        
-        // === اصلاحیه (چک‌لیست تجاری #6) ===
-        // طبق مشخصات فرمت DBC: '@0' = big-endian (Motorola)، '@1' =
-        // little-endian (Intel). این مقدار اکنون واقعاً ذخیره می‌شود
-        // و در extractSignalValue/encodeSignalValue استفاده می‌شود
-        // (قبلاً خوانده می‌شد ولی دور ریخته می‌شد).
-        sig->isBigEndian = (endian[0] == '0');
-        
+
+        sig->type       = (sign[0] == '-') ? SIG_SIGNED : SIG_UNSIGNED;
+        sig->isBigEndian = (endian[0] == '0');  // '@0' = Motorola, '@1' = Intel
+
         msg->signalCount++;
         return true;
     }
-    
+
     return false;
 }
 
-// ======================== پارس کردن خط CM_ (کامنت) ========================
-
 bool VehicleDB::_parseCommentLine(const char* line) {
-    // فرمت ساده: CM_ BO_ CAN_ID "comment text";
-    // (پیاده‌سازی کامل فعلاً ضروری نیست)
+    // Format: CM_ BO_ CAN_ID "comment text";
+    // Not currently needed for this project's use case.
     return true;
 }
-
-// ======================== پارس کردن خط VAL_ (مقادیر) ========================
 
 bool VehicleDB::_parseValueLine(const char* line) {
-    // فرمت: VAL_ CAN_ID SIGNAL_NAME value1 "text1" value2 "text2" ...;
-    // (پیاده‌سازی کامل فعلاً ضروری نیست)
+    // Format: VAL_ CAN_ID SIGNAL_NAME value1 "text1" value2 "text2" ...;
+    // Not currently needed for this project's use case.
     return true;
 }
 
-// ======================== پیدا کردن پیام با CAN ID ========================
+// ============================================================================
+// Lookup
+// ============================================================================
 
 DbcMessage* VehicleDB::findMessageByID(uint32_t canId) {
     for (int i = 0; i < _messageCount; i++) {
@@ -413,11 +355,9 @@ DbcMessage* VehicleDB::findMessageByID(uint32_t canId) {
     return nullptr;
 }
 
-// ======================== پیدا کردن سیگنال ========================
-
 DbcSignal* VehicleDB::findSignal(DbcMessage* msg, const char* signalName) {
     if (!msg) return nullptr;
-    
+
     for (int i = 0; i < msg->signalCount; i++) {
         if (strcmp(msg->signals[i].name, signalName) == 0) {
             return &msg->signals[i];
@@ -426,37 +366,28 @@ DbcSignal* VehicleDB::findSignal(DbcMessage* msg, const char* signalName) {
     return nullptr;
 }
 
-// ======================== کمکی: نگاشت بیت Motorola/big-endian ========================
-// === جدید (چک‌لیست تجاری #6) ===
+// ============================================================================
+// Bit mapping (Motorola/Intel)
+// ============================================================================
 //
-// در فرمت DBC، startBit یک سیگنال Motorola (@0) طبق قرارداد "شماره‌گذاری
-// بیت DBC" است، نه شماره‌گذاری ساده‌ی LSB-first که برای Intel (@1)
-// درست است. در قرارداد DBC، بیت‌های هر بایت از MSB=7 به LSB=0 شماره
-// می‌خورند ولی startBit سیگنال Motorola، بیت *MSB* سیگنال را (طبق
-// همین شماره‌گذاری) مشخص می‌کند و بیت‌های بعدی سیگنال با عبور از
-// مرز بایت به‌جلو (به بیت ۷ بایت بعد) ادامه می‌یابند.
-// فرمول استاندارد صنعتی برای تبدیل startBit اعلام‌شده‌ی DBC (که در
-// حالت Motorola در واقع بر مبنای "بیت DBC" کدگذاری شده) به موقعیت
-// واقعی بیت در بافر 8 بایتی:
-//   dbcBit = startBit
-//   byte   = dbcBit / 8
-//   bit    = dbcBit % 8
-//   pos    = byte*8 + bit   → این خودِ startBit است چون DBC همین‌طور می‌نویسدش
-// و برای حرکت به بیت *بعدی* (کم‌اهمیت‌تر) سیگنال Motorola، باید از
-// bit=0 به byte بعد و bit=7 برویم (بر خلاف Intel که فقط +1 می‌شود).
-// این تابع یک بار موقعیت مطلق (0..63) بیت i‌ام سیگنال (i=0 یعنی MSB
-// برای Motorola، LSB برای Intel) را برمی‌گرداند.
+// A DBC signal's startBit is expressed in "DBC bit numbering", where
+// each byte's bits are numbered MSB=7 to LSB=0. For an Intel (@1)
+// signal, startBit is simply the signal's LSB and subsequent bits
+// increase linearly. For a Motorola (@0) signal, startBit is the
+// signal's MSB, and subsequent (less significant) bits step backward
+// through the byte, wrapping to bit 7 of the next byte when they run
+// past bit 0.
+//
+// Returns the absolute bit position (0-63) of the signal's i-th bit,
+// where i=0 is the MSB for Motorola or the LSB for Intel.
+
 static inline uint16_t _dbcBitPosition(const DbcSignal& signal, uint8_t i) {
     if (!signal.isBigEndian) {
-        // Intel: ساده، +1 خطی از startBit (LSB سیگنال)
-        return signal.startBit + i;
+        return signal.startBit + i;  // Intel: linear from the LSB
     }
-    // Motorola: startBit به‌صورت DBC-bit اعلام شده و MSB سیگنال است.
-    // برای رفتن i بیت "پایین‌تر" (به سمت LSB سیگنال)، در چارچوب بایتی
-    // حرکت می‌کنیم: هر بار bit را یکی کم می‌کنیم؛ وقتی به زیر صفر رسید
-    // به بیت 7 بایت بعد می‌رویم.
+
     uint8_t byteIdx = signal.startBit / 8;
-    int8_t bitIdx = (int8_t)(signal.startBit % 8);
+    int8_t  bitIdx  = (int8_t)(signal.startBit % 8);
     for (uint8_t step = 0; step < i; step++) {
         bitIdx--;
         if (bitIdx < 0) {
@@ -467,33 +398,27 @@ static inline uint16_t _dbcBitPosition(const DbcSignal& signal, uint8_t i) {
     return (uint16_t)byteIdx * 8 + (uint16_t)bitIdx;
 }
 
-// ======================== استخراج مقدار سیگنال ========================
+// ============================================================================
+// Signal value extraction / encoding
+// ============================================================================
 
 float VehicleDB::extractSignalValue(const DbcSignal& signal, const uint8_t* data) {
     if (signal.length == 0) return 0.0f;
 
-    uint64_t rawValue = 0;
-    uint8_t totalBits = signal.length;
+    uint64_t rawValue  = 0;
+    uint8_t  totalBits = signal.length;
 
-    // === اصلاحیه (چک‌لیست تجاری #6) ===
-    // قبلاً همیشه فرض Intel (خطی، +1) می‌شد؛ برای سیگنال‌های Motorola
-    // این مقدار کاملاً اشتباه بود. حالا بر اساس isBigEndian، موقعیت
-    // واقعی هر بیت با _dbcBitPosition محاسبه می‌شود.
-    //
-    // ترتیب قرارگیری در rawValue: برای هر دو حالت، i=0 را LSB نتیجه
-    // (bit 0 of rawValue) می‌گذاریم و i=(totalBits-1) را MSB. برای
-    // Intel این با ترتیب صعودی startBit یکی است (چون i=0 خودش LSB
-    // سیگنال Intel است). برای Motorola، i=0 در _dbcBitPosition همان
-    // MSB سیگنال است، پس اینجا آن را به بالاترین بیت rawValue
-    // (bit totalBits-1) می‌بریم تا مقدار عددی نهایی درست دربیاید.
+    // i=0 maps to bit 0 of rawValue for Intel (already the LSB), and to
+    // the top bit (totalBits-1) for Motorola (where i=0 is the MSB) -
+    // this produces the correct numeric value in both cases.
     for (int i = 0; i < totalBits; i++) {
-        uint16_t bitPos = _dbcBitPosition(signal, i);
-        uint8_t byteIdx = bitPos / 8;
-        uint8_t bitIdx = bitPos % 8;
+        uint16_t bitPos  = _dbcBitPosition(signal, i);
+        uint8_t  byteIdx  = bitPos / 8;
+        uint8_t  bitIdx    = bitPos % 8;
 
-        if (byteIdx >= 8) continue;  // خارج از فریم 8 بایتی - نادیده بگیر
+        if (byteIdx >= 8) continue;  // Outside the 8-byte frame
 
-        bool bitSet = data[byteIdx] & (1 << bitIdx);
+        bool    bitSet         = data[byteIdx] & (1 << bitIdx);
         uint8_t destBitInValue = signal.isBigEndian ? (totalBits - 1 - i) : i;
 
         if (bitSet) {
@@ -501,23 +426,19 @@ float VehicleDB::extractSignalValue(const DbcSignal& signal, const uint8_t* data
         }
     }
 
-    // اگر Signed است، علامت را در نظر بگیر
     if (signal.type == SIG_SIGNED) {
         if (rawValue & (1ULL << (totalBits - 1))) {
-            rawValue |= (~0ULL << totalBits);  // extended sign bit
+            rawValue |= (~0ULL << totalBits);  // Sign-extend
         }
         return (float)((int64_t)rawValue) * signal.scale + signal.offset;
     }
-    
+
     return (float)rawValue * signal.scale + signal.offset;
 }
 
-// ======================== کدگذاری مقدار سیگنال ========================
-
 void VehicleDB::encodeSignalValue(const DbcSignal& signal, float value, uint8_t* data) {
     if (signal.length == 0) return;
-    
-    // تبدیل مقدار به مقدار خام
+
     uint64_t rawValue;
     if (signal.type == SIG_SIGNED) {
         rawValue = (uint64_t)((int64_t)((value - signal.offset) / signal.scale));
@@ -527,17 +448,16 @@ void VehicleDB::encodeSignalValue(const DbcSignal& signal, float value, uint8_t*
 
     uint8_t totalBits = signal.length;
 
-    // === اصلاحیه (چک‌لیست تجاری #6) ===
-    // متقارن با extractSignalValue - همان نگاشت بیت به‌صورت معکوس.
+    // Mirrors extractSignalValue's bit mapping, in reverse.
     for (int i = 0; i < totalBits; i++) {
         uint16_t bitPos = _dbcBitPosition(signal, i);
-        uint8_t byteIdx = bitPos / 8;
-        uint8_t bitIdx = bitPos % 8;
+        uint8_t  byteIdx = bitPos / 8;
+        uint8_t  bitIdx   = bitPos % 8;
 
         if (byteIdx >= 8) continue;
 
         uint8_t srcBitInValue = signal.isBigEndian ? (totalBits - 1 - i) : i;
-        bool bitSet = rawValue & (1ULL << srcBitInValue);
+        bool    bitSet         = rawValue & (1ULL << srcBitInValue);
 
         if (bitSet) {
             data[byteIdx] |= (1 << bitIdx);
@@ -547,13 +467,13 @@ void VehicleDB::encodeSignalValue(const DbcSignal& signal, float value, uint8_t*
     }
 }
 
-// ======================== دریافت تعداد پیام‌ها ========================
+// ============================================================================
+// Accessors
+// ============================================================================
 
 uint8_t VehicleDB::getMessageCount() {
     return _messageCount;
 }
-
-// ======================== دریافت پیام با ایندکس ========================
 
 DbcMessage* VehicleDB::getMessageByIndex(uint8_t index) {
     if (index < _messageCount) {
@@ -562,40 +482,32 @@ DbcMessage* VehicleDB::getMessageByIndex(uint8_t index) {
     return nullptr;
 }
 
-// ======================== تنظیم خودروی فعال ========================
-
 void VehicleDB::setActiveVehicle(const char* brand, const char* model) {
     bool found = false;
-    
+
     for (int i = 0; i < _vehicleCount; i++) {
         if (strcmp(_vehicleList[i].brand, brand) == 0 &&
             strcmp(_vehicleList[i].model, model) == 0) {
             _activeVehicle = _vehicleList[i];
             found = true;
-            Serial.printf("[DB] خودروی فعال: %s %s\n", brand, model);
+            Serial.printf("[DB] Active vehicle: %s %s\n", brand, model);
             break;
         }
     }
-    
+
     if (!found) {
-        // از پیش‌فرض استفاده کن
         _activeVehicle = _vehicleList[0];
-        Serial.printf("[DB] خودروی یافت نشد، استفاده از پیش‌فرض: %s %s\n", 
+        Serial.printf("[DB] Vehicle not found, falling back to default: %s %s\n",
                       _vehicleList[0].brand, _vehicleList[0].model);
     }
-    
-    // بارگذاری فایل DBC مربوطه
+
     loadDBCFile(_activeVehicle.dbcFileName);
 }
-
-// ======================== دریافت نام خودروی فعال ========================
 
 void VehicleDB::getActiveVehicle(char* brand, char* model, size_t maxLen) {
     strncpy(brand, _activeVehicle.brand, maxLen);
     strncpy(model, _activeVehicle.model, maxLen);
 }
-
-// ======================== دریافت پروفایل خودرو ========================
 
 bool VehicleDB::getVehicleProfile(uint8_t index, VehicleProfile& profile) {
     if (index < _vehicleCount) {
@@ -604,8 +516,6 @@ bool VehicleDB::getVehicleProfile(uint8_t index, VehicleProfile& profile) {
     }
     return false;
 }
-
-// ======================== تعداد خودروها ========================
 
 uint8_t VehicleDB::getVehicleCount() {
     return _vehicleCount;

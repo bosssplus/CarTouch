@@ -1,23 +1,16 @@
 /**
- * obd2_reader.h - خواندن داده‌های OBD-II از خودرو
- * 
- * این ماژول با ارسال درخواست‌های استاندارد OBD-II (SAE J1979)
- * به ECU خودرو، اطلاعاتی مثل RPM، سرعت، دما و ... را می‌خواند.
- * 
- * پروتکل: ISO 15765-4 (CAN 11-bit, 500Kbps)
+ * obd2_reader.h - OBD-II data acquisition
  *
- * === بازطراحی non-blocking (چک‌لیست تجاری #4) ===
- * نسخه‌ی قبلی هر PID را با یک حلقه‌ی `while(millis() < timeout)` و
- * `delay()` بین PIDها می‌خواند؛ اگر ECU پاسخ نمی‌داد، این یعنی
- * blocking تا ۲۰۰ میلی‌ثانیه در هر تک PID و می‌توانست loop() اصلی
- * (پس زمینه‌ی LVGL/WebSocket) را قفل کند. این نسخه با یک state
- * machine داخلی جایگزین شده: readAllPIDs() دیگر مستقیماً منتظر
- * پاسخ نمی‌ماند، بلکه هر بار که از loop() صدا زده می‌شود («ادامه
- * بده اگر وقتشه») یک قدم کوچک جلو می‌رود. توابع قدیمی تک‌PID
- * (readEngineRPM و…) به‌عنوان API سازگار با نسخه‌ی قبل نگه داشته
- * شده‌اند ولی اکنون به‌صراحت [BLOCKING] علامت خورده‌اند تا مصرف‌کننده
- * بداند چه زمانی امن است ازشان استفاده کند (مثلاً یک تست دستی از
- * طریق Serial، نه در مسیر اصلی loop()).
+ * Reads standard OBD-II data (SAE J1979) from the vehicle's ECU - RPM,
+ * speed, temperature, etc. Protocol: ISO 15765-4 (CAN 11-bit, 500 Kbps).
+ *
+ * Polling is implemented as a non-blocking state machine: update() must
+ * be called every loop() iteration and advances one small step per call
+ * (send a request, or check the receive queue without blocking) rather
+ * than waiting for a response inline. The older single-PID functions
+ * (readEngineRPM, etc.) are kept for API compatibility but are marked
+ * [BLOCKING] - they wait up to ~200ms per call and must not be used on
+ * the main loop path. Prefer update() / getLatestData().
  */
 
 #ifndef OBD2_READER_H
@@ -27,172 +20,105 @@
 #include "config.h"
 #include "can_manager.h"
 
-// وضعیت‌های ماشین‌حالت خواندن غیرمسدودکننده‌ی چند-PID
+// State machine states for the non-blocking multi-PID poll cycle
 enum ObdPollState : uint8_t {
-    OBD_POLL_IDLE = 0,       // بین دو دور خواندن؛ منتظر شروع دور بعدی
-    OBD_POLL_SENDING,        // در حال ارسال درخواست PID جاری
-    OBD_POLL_WAITING,        // منتظر پاسخ PID جاری (بدون delay/بدون حلقه)
-    OBD_POLL_DONE            // یک دور کامل (همه PIDها) تمام شد
+    OBD_POLL_IDLE = 0,   // Between rounds, waiting for the next one to start
+    OBD_POLL_SENDING,     // Sending the request for the current PID
+    OBD_POLL_WAITING,     // Waiting for the current PID's response (no delay/loop)
+    OBD_POLL_DONE          // A full round (all PIDs) has completed
 };
 
-// ساختار پاسخ OBD-II
 struct ObdResponse {
-    uint8_t pid;            // PID درخواست شده
-    uint8_t data[6];        // داده‌های پاسخ (حداکثر 6 بایت)
-    uint8_t length;         // طول واقعی داده
-    bool success;           // اگر true: پاسخ معتبر است
-    uint32_t timestamp;     // timestamp دریافت (millis)
+    uint8_t  pid;         // Requested PID
+    uint8_t  data[6];      // Response payload (up to 6 bytes)
+    uint8_t  length;        // Actual payload length
+    bool     success;        // true if the response is valid
+    uint32_t timestamp;      // Reception time (millis)
 };
 
-/**
- * کلاس خواندن داده‌های OBD-II
- * 
- * از CANManager برای ارسال/دریافت پیام‌های CAN استفاده می‌کند.
- */
 class OBD2Reader {
 public:
-    /**
-     * سازنده
-     * @param canManager reference به CANManager
-     */
     OBD2Reader(CANManager& canManager);
-    
-    /**
-     * مقداردهی اولیه
-     */
+
     void begin();
-    
+
     /**
-     * [BLOCKING] ارسال درخواست OBD و دریافت پاسخ (PID تکی)
-     * حداکثر ~۲۰۰ میلی‌ثانیه مسدود می‌کند. در loop() اصلی صدا نزنید؛
-     * برای دیباگ دستی یا فراخوانی خارج از حلقه‌ی اصلی مناسب است.
-     * برای خواندن دوره‌ای در پس‌زمینه از update()/getLatestData()
-     * استفاده کنید.
-     * @param pid شناسه PID (مثلاً 0x0C برای RPM)
-     * @param response [out] ساختار پاسخ
-     * @return true در صورت دریافت پاسخ معتبر
+     * [BLOCKING] Sends a request and waits for the response to a single
+     * PID - blocks for up to ~200ms. Do not call from the main loop;
+     * suitable for manual debugging or calls outside the main loop. Use
+     * update()/getLatestData() for periodic background polling.
      */
     bool requestPID(uint8_t pid, ObdResponse& response);
-    
-    /**
-     * [BLOCKING] خواندن دور موتور (RPM) - نگاه کنید به یادداشت requestPID
-     * @return RPM یا 0 در صورت خطا
-     */
+
+    /** [BLOCKING] See requestPID note above. */
     uint16_t readEngineRPM();
-    
-    /**
-     * [BLOCKING] خواندن سرعت خودرو (km/h) - نگاه کنید به یادداشت requestPID
-     * @return سرعت یا 0 در صورت خطا
-     */
-    uint8_t readVehicleSpeed();
-    
-    /**
-     * [BLOCKING] خواندن دمای مایع خنک‌کننده - نگاه کنید به یادداشت requestPID
-     * @return دما به درجه سانتی‌گراد یا -40 در صورت خطا
-     */
-    int8_t readCoolantTemp();
-    
-    /**
-     * [BLOCKING] خواندن موقعیت دریچه گاز - نگاه کنید به یادداشت requestPID
-     * @return درصد (0-100) یا 0 در صورت خطا
-     */
-    uint8_t readThrottlePosition();
-    
-    /**
-     * [BLOCKING] خواندن سطح سوخت - نگاه کنید به یادداشت requestPID
-     * @return درصد (0-100) یا 0 در صورت خطا
-     */
-    uint8_t readFuelLevel();
-    
-    /**
-     * [BLOCKING] خواندن زمان روشن بودن موتور - نگاه کنید به یادداشت requestPID
-     * @return زمان بر حسب ثانیه
-     */
+    uint8_t  readVehicleSpeed();
+    int8_t   readCoolantTemp();
+    uint8_t  readThrottlePosition();
+    uint8_t  readFuelLevel();
     uint16_t readEngineRuntime();
-    
+
     /**
-     * [BLOCKING - نگه‌داشته‌شده فقط برای سازگاری عقب‌رو] خواندن همه
-     * PIDهای پایه به‌صورت مسدودکننده (مجموع تا ~۱٫۲ ثانیه در بدترین
-     * حالت). دیگر در main.cpp/loop() صدا زده نمی‌شود - از update()
-     * استفاده کنید. این تابع فقط برای کدی نگه داشته شده که ممکن است
-     * جای دیگر (مثلاً یک اسکریپت تست) هنوز به آن وابسته باشد.
-     * @param data [out] ساختار داده خودرو
+     * [BLOCKING - kept for backward compatibility only] Reads all base
+     * PIDs sequentially (up to ~1.2s worst case). No longer called from
+     * main.cpp/loop() - use update() instead. Kept only in case other
+     * code still depends on this exact signature.
      */
     void readAllPIDs(VehicleData& data);
 
     /**
-     * [NON-BLOCKING] باید هر تکرار loop() صدا زده شود (شبیه
-     * tftUI.update()). به‌صورت خودکار، با رعایت _requestInterval،
-     * یک قدم از ماشین‌حالت خواندن دوره‌ای PIDها را جلو می‌برد: یک
-     * درخواست می‌فرستد یا صف دریافت را (بدون مسدود کردن) چک می‌کند.
-     * هرگز delay() یا حلقه‌ی انتظار ندارد.
+     * [NON-BLOCKING] Must be called every loop() iteration (like
+     * tftUI.update()). Advances the periodic poll state machine by one
+     * step, respecting the minimum request interval: sends a request or
+     * checks the receive queue without blocking. Never calls delay() or
+     * waits in a loop.
      */
     void update();
 
     /**
-     * آخرین داده‌ی کامل‌شده توسط update() را برمی‌گرداند. اگر هنوز
-     * حتی یک دور کامل نشده، مقادیر پیش‌فرض VehicleData (صفر/UNKNOWN)
-     * را می‌دهد.
-     * @return true اگر حداقل یک دور کامل انجام شده باشد
+     * Returns the most recently completed poll round. If no round has
+     * completed yet, returns default VehicleData values (zero/UNKNOWN).
+     * @return true if at least one full round has completed
      */
     bool getLatestData(VehicleData& outData);
 
-    /**
-     * وضعیت جاری ماشین‌حالت update() را برمی‌گرداند (برای نمایش
-     * "در حال خواندن..." یا تشخیص timeout مکرر در UI/دیباگ)
-     */
+    /** Current poll state machine status (for UI/debug status display). */
     ObdPollState getPollState();
-    
-    /**
-     * بررسی پشتیبانی از یک PID (PID 0x00: PIDsSupported)
-     * @param pid PID مورد نظر
-     * @return true اگر ECU از این PID پشتیبانی کند
-     */
+
+    /** Checks whether the ECU supports a given PID (via PID 0x00). */
     bool isPidSupported(uint8_t pid);
-    
-    /**
-     * دریافت لیست کدهای خطا (DTC)
-     * @param dtcList [out] آرایه کدهای خطا
-     * @param maxCount حداکثر تعداد DTC
-     * @return تعداد DTCهای یافت شده
-     */
+
+    /** Reads stored diagnostic trouble codes (DTCs). */
     uint8_t readDTCs(uint16_t dtcList[], uint8_t maxCount = MAX_DTC_COUNT);
-    
-    /**
-     * پاک کردن کدهای خطا (Clear DTC)
-     * @return true در صورت موفقیت
-     */
+
+    /** Clears stored DTCs. */
     bool clearDTCs();
-    
-    /**
-     * آخرین خطا را برمی‌گرداند
-     */
+
     uint8_t getLastError();
 
 private:
     CANManager& _can;
-    uint8_t _lastError;
-    uint32_t _lastRequestTime;
-    uint32_t _requestInterval;  // حداقل فاصله بین درخواست‌ها (ms)
-    
-    // تابع داخلی برای ارسال درخواست و دریافت پاسخ
-    bool _sendOBDRequest(uint8_t pid, uint8_t expectedDataLength);
-    bool _parseOBDResponse(const uint8_t* rawData, uint8_t length, uint8_t pid, ObdResponse& response);
+    uint8_t     _lastError;
+    uint32_t    _lastRequestTime;
+    uint32_t    _requestInterval;  // Minimum spacing between requests (ms)
 
-    // ==================== state machine غیرمسدودکننده (update()) ====================
-    // ترتیب PIDهایی که هر دور خوانده می‌شوند
+    bool _sendOBDRequest(uint8_t pid, uint8_t expectedDataLength);
+    bool _parseOBDResponse(const uint8_t* rawData, uint8_t length,
+                            uint8_t pid, ObdResponse& response);
+
+    // -- Non-blocking poll state machine (update()) --------------------------
     static const uint8_t _POLL_PID_COUNT = 6;
     ObdPollState _pollState;
-    uint8_t _pollIndex;              // اندیس PID جاری در _POLL_PID_COUNT
-    uint32_t _pollWaitStartMs;       // زمان شروع انتظار پاسخ PID جاری
-    VehicleData _pendingData;        // داده در حال ساخته‌شدن طی دور جاری
-    VehicleData _latestData;         // آخرین دور کامل‌شده
-    bool _hasCompletedRound;
-    uint32_t _pollIntervalMs;        // فاصله بین دو دور کامل (نه بین PIDها)
-    uint32_t _lastRoundStartMs;
+    uint8_t      _pollIndex;           // Current PID index within _POLL_PID_COUNT
+    uint32_t     _pollWaitStartMs;      // When the current PID's wait started
+    VehicleData  _pendingData;          // Data being assembled this round
+    VehicleData  _latestData;           // Most recently completed round
+    bool         _hasCompletedRound;
+    uint32_t     _pollIntervalMs;       // Spacing between rounds (not between PIDs)
+    uint32_t     _lastRoundStartMs;
 
-    void _pollStartNextPid();        // ارسال درخواست PID جاری (non-blocking)
-    void _pollCheckResponse();       // چک غیرمسدودکننده‌ی صف دریافت
+    void _pollStartNextPid();    // Sends the current PID's request (non-blocking)
+    void _pollCheckResponse();   // Non-blocking receive-queue check
     void _applyPidToData(uint8_t pid, const ObdResponse& resp, VehicleData& data);
 };
 
