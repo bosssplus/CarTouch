@@ -41,48 +41,48 @@
 
 <table dir="rtl">
 <tr>
-<td align="center"><b></b></td>
-<td align="center"><b>قابلیت</b></td>
+<td><b></b></td>
+<td><b>قابلیت</b></td>
 </tr>
 <tr>
-<td align="center">🎮 <b>کنترل</b></td>
-<td align="center">صفحه‌ی لمسی TFT داخل خودرو (روش اصلی) + Web Dashboard از طریق WiFi (روش مکمل)</td>
+<td>🎮 <b>کنترل</b></td>
+<td>صفحه‌ی لمسی TFT داخل خودرو (روش اصلی) + Web Dashboard از طریق WiFi (روش مکمل)</td>
 </tr>
 <tr>
-<td align="center">🔐 <b>فرمان‌ها</b></td>
-<td align="center">قفل/باز کردن ۴ درب و صندوق، ۴ شیشه + سانروف، آینه‌ها، دزدگیر</td>
+<td>🔐 <b>فرمان‌ها</b></td>
+<td>قفل/باز کردن ۴ درب و صندوق، ۴ شیشه + سانروف، آینه‌ها، دزدگیر</td>
 </tr>
 <tr>
-<td align="center">📊 <b>مانیتورینگ</b></td>
-<td align="center">سرعت، RPM، دمای موتور، ولتاژ باطری، سطح سوخت + خواندن کدهای خطا (DTC) — به‌صورت <b>غیرمسدودکننده</b> (نگاه کنید به وضعیت زیر)</td>
+<td>📊 <b>مانیتورینگ</b></td>
+<td>سرعت، RPM، دمای موتور، ولتاژ باطری، سطح سوخت + خواندن کدهای خطا (DTC) — به‌صورت <b>غیرمسدودکننده</b> (نگاه کنید به وضعیت زیر)</td>
 </tr>
 <tr>
-<td align="center">🎓 <b>یادگیری</b></td>
-<td align="center">ضبط فرمان از دکمه‌های فیزیکی واقعی خودرو، یا ورود دستی CAN ID/بایت</td>
+<td>🎓 <b>یادگیری</b></td>
+<td>ضبط فرمان از دکمه‌های فیزیکی واقعی خودرو، یا ورود دستی CAN ID/بایت</td>
 </tr>
 <tr>
-<td align="center">✅ <b>چرخه‌ی تأیید</b></td>
-<td align="center">هر فرمان یادگرفته/دستی تا تأیید صریح شما «تأییدنشده» است و اجرا نمی‌شود</td>
+<td>✅ <b>چرخه‌ی تأیید</b></td>
+<td>هر فرمان یادگرفته/دستی تا تأیید صریح شما «تأییدنشده» است و اجرا نمی‌شود</td>
 </tr>
 <tr>
-<td align="center">💾 <b>دیتابیس شخصی</b></td>
-<td align="center">ذخیره، بارگذاری و اشتراک‌گذاری پروفایل خودروهای دست‌ساز به‌صورت JSON</td>
+<td>💾 <b>دیتابیس شخصی</b></td>
+<td>ذخیره، بارگذاری و اشتراک‌گذاری پروفایل خودروهای دست‌ساز به‌صورت JSON</td>
 </tr>
 <tr>
-<td align="center">🛡️ <b>ایمنی</b></td>
-<td align="center">حالت Listen-Only (پیش‌فرض روشن)، محدودیت نرخ فرمان، اجبار تغییر رمز پیش‌فرض، Watchdog، توکن نشست WebSocket با همگام‌سازی بین TFT و وب</td>
+<td>🛡️ <b>ایمنی</b></td>
+<td>حالت Listen-Only (پیش‌فرض روشن)، محدودیت نرخ فرمان، اجبار تغییر رمز پیش‌فرض، Watchdog، توکن نشست WebSocket با همگام‌سازی بین TFT و وب</td>
 </tr>
 <tr>
-<td align="center">🔋 <b>انرژی</b></td>
-<td align="center">Auto Sleep بعد از ۱۰ دقیقه بی‌فعالیتی + بیدار شدن با پیام CAN</td>
+<td>🔋 <b>انرژی</b></td>
+<td>Auto Sleep بعد از ۱۰ دقیقه بی‌فعالیتی + بیدار شدن با پیام CAN</td>
 </tr>
 <tr>
-<td align="center">🌗 <b>نمایش</b></td>
-<td align="center">حالت شب/روز خودکار یا دستی + کالیبراسیون واقعی تاچ‌اسکرین</td>
+<td>🌗 <b>نمایش</b></td>
+<td>حالت شب/روز خودکار یا دستی + کالیبراسیون واقعی تاچ‌اسکرین</td>
 </tr>
 <tr>
-<td align="center">⬆️ <b>به‌روزرسانی</b></td>
-<td align="center">OTA (Over-The-Air) از طریق وب — بدون نیاز به اتصال کابل مجدد</td>
+<td>⬆️ <b>به‌روزرسانی</b></td>
+<td>OTA (Over-The-Air) از طریق وب — بدون نیاز به اتصال کابل مجدد</td>
 </tr>
 </table>
 
@@ -94,70 +94,72 @@
 
 <table dir="rtl">
 <tr>
-<td align="center"><b>موضوع</b></td>
-<td align="center"><b>وضعیت</b></td>
+<td><b>موضوع</b></td>
+<td><b>وضعیت</b></td>
 </tr>
 <tr>
-<td align="center">خواندن OBD-II استاندارد (RPM، سرعت، دما، …)</td>
-<td align="center">✅ آماده — پیاده‌سازی <b>غیرمسدودکننده</b> (state machine در <code>OBD2Reader::update()</code>)؛ <code>loop()</code> اصلی هرگز روی پاسخ ECU مسدود نمی‌شود</td>
+<td>خواندن OBD-II استاندارد (RPM، سرعت، دما، …)</td>
+<td>✅ آماده — پیاده‌سازی <b>غیرمسدودکننده</b> (state machine در <code>OBD2Reader::update()</code>)؛ <code>loop()</code> اصلی هرگز روی پاسخ ECU مسدود نمی‌شود</td>
 </tr>
 <tr>
 <td align="center">Task Watchdog</td>
-<td align="center">✅ فعال (پیش‌فرض ۸ ثانیه) — در صورت گیر کردن هر بخشی از <code>loop()</code>، دستگاه به‌جای هنگ دائمی ری‌ست می‌شود</td>
+<td>✅ فعال (پیش‌فرض ۸ ثانیه) — در صورت گیر کردن هر بخشی از <code>loop()</code>، دستگاه به‌جای هنگ دائمی ری‌ست می‌شود</td>
 </tr>
 <tr>
-<td align="center">Learn Mode و ورود دستی</td>
-<td align="center">✅ پیاده‌سازی شده — روی خودروهای دارای <b>rolling code</b> (معمولاً بعد از ۲۰۱۸ و برندهای پریمیوم) کار نمی‌کند</td>
+<td>Learn Mode و ورود دستی</td>
+<td>✅ پیاده‌سازی شده — روی خودروهای دارای <b>rolling code</b> (معمولاً بعد از ۲۰۱۸ و برندهای پریمیوم) کار نمی‌کند</td>
 </tr>
 <tr>
-<td align="center">فرمان قفل/شیشه از روی فایل DBC</td>
-<td align="center">❌ <b>پشتیبانی نمی‌شود.</b> فایل‌های OpenDBC عمدتاً «خواندنی» هستند؛ برای فرمان از Learn Mode یا ورود دستی استفاده کنید</td>
+<td>فرمان قفل/شیشه از روی فایل DBC</td>
+<td>❌ <b>پشتیبانی نمی‌شود.</b> فایل‌های OpenDBC عمدتاً «خواندنی» هستند؛ برای فرمان از Learn Mode یا ورود دستی استفاده کنید</td>
 </tr>
 <tr>
-<td align="center">فایل‌های DBC</td>
-<td align="center">۵۷ فایل همراه پروژه است؛ <b>۳۸ مدل</b> (تویوتا، بی‌ام‌و، هوندا/اکورا، جی‌ام/کادیلاک، کرایسلر/FCA، فورد، هیوندای، مزدا، مرسدس، نیسان، اوپل، PSA، ولوو، فولکس‌واگن، تسلا، ریویان و چند برند دیگر) + حالت عمومی OBD-II در لیست انتخاب وصل شده‌اند. فهرست کامل مدل‌های وصل‌نشده و دلیل هرکدام در کامنت‌های ابتدای <code>VehicleDB::begin()</code> (<code>src/vehicle_db.cpp</code>) مستند است</td>
+<td>فایل‌های DBC</td>
+<td>۵۷ فایل همراه پروژه است؛ <b>۳۸ مدل</b> (تویوتا، بی‌ام‌و، هوندا/اکورا، جی‌ام/کادیلاک، کرایسلر/FCA، فورد، هیوندای، مزدا، مرسدس، نیسان، اوپل، PSA، ولوو، فولکس‌واگن، تسلا، ریویان و چند برند دیگر) + حالت عمومی OBD-II در لیست انتخاب وصل شده‌اند. فهرست کامل مدل‌های وصل‌نشده و دلیل هرکدام در کامنت‌های ابتدای <code>VehicleDB::begin()</code> (<code>src/vehicle_db.cpp</code>) مستند است</td>
 </tr>
 <tr>
-<td align="center">پارسر DBC</td>
-<td align="center">سیگنال‌های <b>Intel (<code>@1</code>) و Motorola (<code>@0</code>) هر دو پشتیبانی می‌شوند</b> (نگاشت بیت جداگانه برای هرکدام). سقف <b>۱۵۰ پیام</b> برای هر فایل (چند فایل بسیار حجیم مثل <code>ford_lincoln_base_pt.dbc</code> هنوز به‌عمد به لیست وصل نشده‌اند — به همان کامنت بالا مراجعه کنید)</td>
+<td>پارسر DBC</td>
+<td>سیگنال‌های <b>Intel (<code>@1</code>) و Motorola (<code>@0</code>) هر دو پشتیبانی می‌شوند</b> (نگاشت بیت جداگانه برای هرکدام). سقف <b>۱۵۰ پیام</b> برای هر فایل (چند فایل بسیار حجیم مثل <code>ford_lincoln_base_pt.dbc</code> هنوز به‌عمد به لیست وصل نشده‌اند — به همان کامنت بالا مراجعه کنید)</td>
 </tr>
 <tr>
 <td align="center">Listen-Only</td>
-<td align="center">پیش‌فرض <b>روشن</b> است (<code>listenOnlyMode = true</code>). این حالت فقط <b>نرم‌افزاری</b> است (فیلتر سطح برنامه، نه enforcement سخت‌افزاری واقعی درایور TWAI)</td>
+<td>پیش‌فرض <b>روشن</b> است (<code>listenOnlyMode = true</code>). این حالت فقط <b>نرم‌افزاری</b> است (فیلتر سطح برنامه، نه enforcement سخت‌افزاری واقعی درایور TWAI)</td>
 </tr>
 <tr>
-<td align="center">کالیبراسیون تاچ</td>
-<td align="center">✅ کالیبراسیون <b>واقعی و تعاملی</b> (۵ نقطه، با <code>TFT_eSPI::calibrateTouch()</code>) در اولین بوت اجرا می‌شود و نتیجه در حافظه‌ی غیرفرار ذخیره می‌شود؛ از تب تنظیمات هم قابل تکرار است</td>
+<td>کالیبراسیون تاچ</td>
+<td>✅ کالیبراسیون <b>واقعی و تعاملی</b> (۵ نقطه، با <code>TFT_eSPI::calibrateTouch()</code>) در اولین بوت اجرا می‌شود و نتیجه در حافظه‌ی غیرفرار ذخیره می‌شود؛ از تب تنظیمات هم قابل تکرار است</td>
 </tr>
 <tr>
-<td align="center">Session وب/TFT</td>
-<td align="center">✅ تغییر رمز از هر مسیری (صفحه‌ی لمسی یا وب) بلافاصله تمام نشست‌های وب (HTTP و WebSocket) را باطل می‌کند</td>
+<td>Session وب/TFT</td>
+<td>✅ تغییر رمز از هر مسیری (صفحه‌ی لمسی یا وب) بلافاصله تمام نشست‌های وب (HTTP و WebSocket) را باطل می‌کند</td>
 </tr>
 <tr>
-<td align="center">OTA (به‌روزرسانی بی‌سیم)</td>
-<td align="center">✅ پیاده‌سازی شده — مسیر <code>/update</code> در وب‌سرور، آپلود فایل <code>.bin</code> فریمویر یا ایمیج SPIFFS</td>
+<td>OTA (به‌روزرسانی بی‌سیم)</td>
+<td>✅ پیاده‌سازی شده — مسیر <code>/update</code> در وب‌سرور، آپلود فایل <code>.bin</code> فریمویر یا ایمیج SPIFFS</td>
 </tr>
 <tr>
-<td align="center">حافظه‌ی داخلی (DRAM)</td>
-<td align="center">آبجکت‌های حجیم (<code>vehicleDB</code> و وابسته‌هایش) به‌صورت <b>پوینتر با <code>new</code> در <code>setup()</code></b> ساخته می‌شوند تا از سرریز DRAM هنگام لینک جلوگیری شود؛ روی هسته‌های Arduino-ESP32 با PSRAM فعال، تخصیص‌های بزرگ به‌طور خودکار از PSRAM سرو می‌شوند</td>
+<td>حافظه‌ی داخلی (DRAM)</td>
+<td>آبجکت‌های حجیم (<code>vehicleDB</code> و وابسته‌هایش) به‌صورت <b>پوینتر با <code>new</code> در <code>setup()</code></b> ساخته می‌شوند تا از سرریز DRAM هنگام لینک جلوگیری شود؛ روی هسته‌های Arduino-ESP32 با PSRAM فعال، تخصیص‌های بزرگ به‌طور خودکار از PSRAM سرو می‌شوند</td>
 </tr>
 <tr>
 <td align="center">HTTPS</td>
-<td align="center">ندارد — ترافیک وب رمزنگاری نمی‌شود</td>
+<td>ندارد — ترافیک وب رمزنگاری نمی‌شود</td>
 </tr>
 <tr>
 <td align="center">Secure Boot / Flash Encryption</td>
-<td align="center">ندارد</td>
+<td>ندارد</td>
 </tr>
 <tr>
-<td align="center">تست روی سخت‌افزار واقعی</td>
-<td align="center">تغییرات اخیر (لیست بالا) به‌صورت منطقی/دستی بررسی شده‌اند، ولی هنوز با toolchain واقعی PlatformIO کامپایل و روی خودروی واقعی تست نشده‌اند</td>
+<td>تست روی سخت‌افزار واقعی</td>
+<td>تغییرات اخیر (لیست بالا) به‌صورت منطقی/دستی بررسی شده‌اند، ولی هنوز با toolchain واقعی PlatformIO کامپایل و روی خودروی واقعی تست نشده‌اند</td>
 </tr>
 </table>
 
-> کارکرد نهایی روی خودروی واقعی فقط با تست خودتان روی سخت‌افزار قابل تأیید است.
-> فهرست کامل و به‌روز مشکلات شناخته‌شده: [`CHANGELOG.md`](./CHANGELOG.md)
-> وضعیت گام‌به‌گام اصلاحات نسخه‌ی تجاری: [`PROGRESS_CHECKLIST.md`](./PROGRESS_CHECKLIST.md)
+<blockquote dir="rtl">
+<p>کارکرد نهایی روی خودروی واقعی فقط با تست خودتان روی سخت‌افزار قابل تأیید است.</p>
+<p>فهرست کامل و به‌روز مشکلات شناخته‌شده: <a href="./CHANGELOG.md"><code>CHANGELOG.md</code></a></p>
+<p>وضعیت گام‌به‌گام اصلاحات نسخه‌ی تجاری: <a href="./PROGRESS_CHECKLIST.md"><code>PROGRESS_CHECKLIST.md</code></a></p>
+</blockquote>
 
 ---
 
@@ -187,8 +189,10 @@ flowchart LR
 <li>فقط بعد از این مرحله، فرمان در تب کنترل اصلی فعال می‌شود.</li>
 </ol>
 
-> تشخیص کاندیدها نیمه‌خودکار است و تأیید نهایی همیشه با شماست. دستگاه هرگز فرمان آزمایشی یا تصادفی روی باس نمی‌فرستد.
-> معماری، الگوریتم و قوانین ایمنی: [`CarTouch_SPEC.md`](./CarTouch_SPEC.md)
+<blockquote dir="rtl">
+<p>تشخیص کاندیدها نیمه‌خودکار است و تأیید نهایی همیشه با شماست. دستگاه هرگز فرمان آزمایشی یا تصادفی روی باس نمی‌فرستد.</p>
+<p>معماری، الگوریتم و قوانین ایمنی: <a href="./CarTouch_SPEC.md"><code>CarTouch_SPEC.md</code></a></p>
+</blockquote>
 
 ---
 
@@ -196,39 +200,39 @@ flowchart LR
 
 <table dir="rtl">
 <tr>
-<td align="center"><b>قطعه</b></td>
+<td><b>قطعه</b></td>
 <td align="center"><b>تعداد</b></td>
-<td align="center"><b>توضیحات</b></td>
+<td><b>توضیحات</b></td>
 </tr>
 <tr>
-<td align="center"><b>ESP32-S3 DevKit</b> (ماژول N16R8)</td>
+<td><b>ESP32-S3 DevKit</b> (ماژول N16R8)</td>
 <td align="center">۱</td>
-<td align="center">فلش ۱۶MB + PSRAM هشت مگابایتی؛ دارای کنترلر CAN (TWAI)</td>
+<td>فلش ۱۶MB + PSRAM هشت مگابایتی؛ دارای کنترلر CAN (TWAI)</td>
 </tr>
 <tr>
 <td align="center"><b>SN65HVD230</b></td>
 <td align="center">۱</td>
-<td align="center">ترنسیور CAN ۳٫۳ ولت</td>
+<td>ترنسیور CAN ۳٫۳ ولت</td>
 </tr>
 <tr>
-<td align="center"><b>نمایشگر TFT با کنترلر ILI9341</b></td>
+<td><b>نمایشگر TFT با کنترلر ILI9341</b></td>
 <td align="center">۱</td>
-<td align="center">SPI، رزولوشن ۲۴۰×۳۲۰، ۲٫۴ تا ۲٫۸ اینچ، همراه تاچ XPT2046 (روی همان ماژول)</td>
+<td>SPI، رزولوشن ۲۴۰×۳۲۰، ۲٫۴ تا ۲٫۸ اینچ، همراه تاچ XPT2046 (روی همان ماژول)</td>
 </tr>
 <tr>
-<td align="center"><b>مبدل 12V به 3.3V</b></td>
+<td><b>مبدل 12V به 3.3V</b></td>
 <td align="center">۱</td>
-<td align="center">حداقل ۱ آمپر خروجی</td>
+<td>حداقل ۱ آمپر خروجی</td>
 </tr>
 <tr>
-<td align="center"><b>کابل / کانکتور OBD-II</b></td>
+<td><b>کابل / کانکتور OBD-II</b></td>
 <td align="center">۱</td>
-<td align="center">اختیاری (اگر مستقیم به سیم‌های CAN وصل نمی‌شوید)</td>
+<td>اختیاری (اگر مستقیم به سیم‌های CAN وصل نمی‌شوید)</td>
 </tr>
 <tr>
-<td align="center">سیم jumper و محفظه</td>
+<td>سیم jumper و محفظه</td>
 <td align="center">—</td>
-<td align="center">برای اتصال و نصب داخل خودرو</td>
+<td>برای اتصال و نصب داخل خودرو</td>
 </tr>
 </table>
 
@@ -246,9 +250,9 @@ flowchart LR
 
 <table dir="rtl">
 <tr>
-<td align="center"><b>پین ماژول</b></td>
-<td align="center"><b>پین ESP32-S3</b></td>
-<td align="center"><b>توضیحات</b></td>
+<td><b>پین ماژول</b></td>
+<td><b>پین ESP32-S3</b></td>
+<td><b>توضیحات</b></td>
 </tr>
 <tr>
 <td align="center">CS</td>
@@ -293,12 +297,12 @@ flowchart LR
 <tr>
 <td align="center">T<i>DIN / T</i>DOUT / T_CLK</td>
 <td align="center">GPIO11 / GPIO13 / GPIO12</td>
-<td align="center">اشتراکی با SPI نمایشگر (فقط CS تاچ جداست)</td>
+<td>اشتراکی با SPI نمایشگر (فقط CS تاچ جداست)</td>
 </tr>
 <tr>
 <td align="center">VCC / GND</td>
 <td align="center">3.3V / GND</td>
-<td align="center">تغذیه و زمین مشترک</td>
+<td>تغذیه و زمین مشترک</td>
 </tr>
 </table>
 
@@ -309,14 +313,14 @@ flowchart LR
 
 <table dir="rtl">
 <tr>
-<td align="center"><b>پین ماژول</b></td>
-<td align="center"><b>پین ESP32-S3</b></td>
-<td align="center"><b>توضیحات</b></td>
+<td><b>پین ماژول</b></td>
+<td><b>پین ESP32-S3</b></td>
+<td><b>توضیحات</b></td>
 </tr>
 <tr>
 <td align="center">VCC / GND</td>
 <td align="center">3.3V / GND</td>
-<td align="center">تغذیه و زمین مشترک</td>
+<td>تغذیه و زمین مشترک</td>
 </tr>
 <tr>
 <td align="center">CTX</td>
@@ -326,11 +330,13 @@ flowchart LR
 <tr>
 <td align="center">CRX</td>
 <td align="center">GPIO6</td>
-<td align="center">CAN Receive (به‌جای GPIO10 تا با TFT_CS تداخل نکند)</td>
+<td>CAN Receive (به‌جای GPIO10 تا با TFT_CS تداخل نکند)</td>
 </tr>
 </table>
 
-> باس خودرو از قبل ترمینیت (۱۲۰Ω) شده است؛ مقاومت ترمینیشن ماژول را فعال **نکنید** (فقط روی میز تست دو-نودی لازم است).
+<blockquote dir="rtl">
+<p>باس خودرو از قبل ترمینیت (۱۲۰Ω) شده است؛ مقاومت ترمینیشن ماژول را فعال <b>نکنید</b> (فقط روی میز تست دو-نودی لازم است).</p>
+</blockquote>
 
 </details>
 
@@ -342,28 +348,28 @@ flowchart LR
 <table dir="rtl">
 <tr>
 <td align="center"><b>پین OBD-II</b></td>
-<td align="center"><b>علامت</b></td>
-<td align="center"><b>اتصال</b></td>
+<td><b>علامت</b></td>
+<td><b>اتصال</b></td>
 </tr>
 <tr>
 <td align="center">6</td>
 <td align="center">CAN-H</td>
-<td align="center">CAN-H ماژول SN65HVD230</td>
+<td>CAN-H ماژول SN65HVD230</td>
 </tr>
 <tr>
 <td align="center">14</td>
 <td align="center">CAN-L</td>
-<td align="center">CAN-L ماژول SN65HVD230</td>
+<td>CAN-L ماژول SN65HVD230</td>
 </tr>
 <tr>
 <td align="center">4</td>
 <td align="center">GND</td>
-<td align="center">زمین</td>
+<td>زمین</td>
 </tr>
 <tr>
 <td align="center">16</td>
 <td align="center">+12V</td>
-<td align="center">ورودی مبدل ولتاژ (تغذیه)</td>
+<td>ورودی مبدل ولتاژ (تغذیه)</td>
 </tr>
 </table>
 
@@ -417,28 +423,28 @@ pio device monitor     # مانیتور سریال (115200)
 
 <table dir="rtl">
 <tr>
-<td align="center"><b>کتابخانه</b></td>
-<td align="center"><b>نسخه</b></td>
-<td align="center"><b>مجوز</b></td>
-<td align="center"><b>کاربرد</b></td>
+<td><b>کتابخانه</b></td>
+<td><b>نسخه</b></td>
+<td><b>مجوز</b></td>
+<td><b>کاربرد</b></td>
 </tr>
 <tr>
 <td align="center">TFT_eSPI</td>
 <td align="center">≥ 2.5.43</td>
 <td align="center">BSD</td>
-<td align="center">درایور نمایشگر + کالیبراسیون تاچ</td>
+<td>درایور نمایشگر + کالیبراسیون تاچ</td>
 </tr>
 <tr>
 <td align="center">lvgl</td>
 <td align="center">8.4.x</td>
 <td align="center">MIT</td>
-<td align="center">رابط گرافیکی</td>
+<td>رابط گرافیکی</td>
 </tr>
 <tr>
 <td align="center">ESPAsyncWebServer</td>
 <td align="center">≥ 3.7.0</td>
 <td align="center">LGPL</td>
-<td align="center">وب سرور Async + OTA</td>
+<td>وب سرور Async + OTA</td>
 </tr>
 <tr>
 <td align="center">AsyncTCP</td>
@@ -450,7 +456,7 @@ pio device monitor     # مانیتور سریال (115200)
 <td align="center">ArduinoJson</td>
 <td align="center">≥ 7.2.0</td>
 <td align="center">MIT</td>
-<td align="center">کار با JSON</td>
+<td>کار با JSON</td>
 </tr>
 </table>
 
@@ -468,7 +474,9 @@ pio device monitor     # مانیتور سریال (115200)
 <li><b>همین اول رمز را عوض کنید</b> (حداقل ۸ کاراکتر، متفاوت از رمز پیش‌فرض) — از تب تنظیمات وب یا از صفحه‌ی لمسی. تا تغییر ندهید، دستگاه هر بار هشدار نشان می‌دهد. تغییر رمز از هر مسیر (وب یا لمسی)، بلافاصله نشست‌های باز در مسیر دیگر را هم باطل می‌کند.</li>
 </ol>
 
-> رمزهای موقت در ریپوی عمومی دیده می‌شوند؛ آن‌ها را رمز نهایی حساب نکنید. رمز WiFi دستگاه (Access Point) را می‌توانید قبل از فلش با `WIFI_AP_PASSWORD` در `src/config.h` عوض کنید.
+<blockquote dir="rtl">
+<p>رمزهای موقت در ریپوی عمومی دیده می‌شوند؛ آن‌ها را رمز نهایی حساب نکنید. رمز WiFi دستگاه (Access Point) را می‌توانید قبل از فلش با <code>WIFI_AP_PASSWORD</code> در <code>src/config.h</code> عوض کنید.</p>
+</blockquote>
 
 پیام‌های WebSocket روی همان پورت ۸۰ (مسیر `/ws`) و بعد از احراز هویت با توکن نشست کار می‌کنند.
 
@@ -514,20 +522,20 @@ CarTouch/
 
 <table dir="rtl">
 <tr>
-<td align="center"><b>فایل</b></td>
-<td align="center"><b>چه چیزی در آن هست</b></td>
+<td><b>فایل</b></td>
+<td><b>چه چیزی در آن هست</b></td>
 </tr>
 <tr>
 <td align="center"><a href="./CarTouch_SPEC.md"><code>CarTouch_SPEC.md</code></a></td>
-<td align="center">معماری Learn Mode، الگوریتم، قوانین ایمنی، ترتیب توسعه — مرجع کامل برای ادامه‌ی توسعه</td>
+<td>معماری Learn Mode، الگوریتم، قوانین ایمنی، ترتیب توسعه — مرجع کامل برای ادامه‌ی توسعه</td>
 </tr>
 <tr>
 <td align="center"><a href="./CHANGELOG.md"><code>CHANGELOG.md</code></a></td>
-<td align="center">تغییرات هر نسخه، اصلاحات امنیتی و باگ‌ها، و مشکلات شناخته‌شده</td>
+<td>تغییرات هر نسخه، اصلاحات امنیتی و باگ‌ها، و مشکلات شناخته‌شده</td>
 </tr>
 <tr>
 <td align="center"><a href="./PROGRESS_CHECKLIST.md"><code>PROGRESS_CHECKLIST.md</code></a></td>
-<td align="center">وضعیت دقیق هر مورد از چک‌لیست اصلاحات نسخه‌ی تجاری (کامل‌شده / باقی‌مانده)</td>
+<td>وضعیت دقیق هر مورد از چک‌لیست اصلاحات نسخه‌ی تجاری (کامل‌شده / باقی‌مانده)</td>
 </tr>
 </table>
 
