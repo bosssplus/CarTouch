@@ -1,67 +1,68 @@
 /**
- * vehicle_control.cpp - پیاده‌سازی کنترل خودرو (CarTouch v2.0)
- * 
- * تفاوت اصلی با v1.0: به‌جای CAN ID های هاردکد، فرمان‌ها از
- * ActiveProfileManager (که خودش از VehicleDB یا CustomVehicleStore
- * می‌خواند) حل می‌شوند. به بخش ۷.۱ سند مراجعه کنید.
- * 
- * rate-limit سطح پایین (MIN_COMMAND_INTERVAL_MS=150ms) دقیقاً مثل
- * v1.0 حفظ شده و هم مسیر جدید (ActiveProfileManager) و هم مسیر
- * legacy (setCustomCANIDs) از همان یک نقطه (_sendResolvedMessage/
- * _sendLegacyCommand که هر دو _lastCommandTime مشترک را چک می‌کنند)
- * عبور می‌کنند.
+ * vehicle_control.cpp - Vehicle control implementation
+ *
+ * Commands are resolved via ActiveProfileManager (built-in DBC or a
+ * custom Learned/Manual profile) instead of hardcoded CAN IDs. See
+ * CarTouch_SPEC.md section 7.1.
+ *
+ * Both the profile-driven path and the legacy path (setCustomCANIDs)
+ * funnel through _sendResolvedMessage() / _sendLegacyCommand(), which
+ * share the same rate limit and duty-cycle state.
  */
 
 #include "vehicle_control.h"
 #include "custom_vehicle.h"
 
-// ======================== سازنده ========================
+// ============================================================================
+// Constructor
+// ============================================================================
 
 VehicleControl::VehicleControl(CANManager& canManager, ActiveProfileManager& profileManager)
     : _can(canManager), _profileManager(profileManager) {
-    _lastError = 0;
-    _lastErrorMessage = "";
-    _lastCommandTime = 0;
-    
-    _legacyOverrideActive = false;
-    _canIdDoorLock = 0x1A0;
-    _canIdWindow   = 0x1A1;
-    _canIdSunroof  = 0x1A2;
-    _canIdTrunk    = 0x1A3;
-    _canIdMirror   = 0x1A4;
-    _canIdAlarm    = 0x1A5;
-}
+    _lastError          = 0;
+    _lastErrorMessage   = "";
+    _lastCommandTime     = 0;
 
-// ======================== مقداردهی اولیه ========================
+    _legacyOverrideActive = false;
+    _canIdDoorLock         = 0x1A0;
+    _canIdWindow           = 0x1A1;
+    _canIdSunroof          = 0x1A2;
+    _canIdTrunk            = 0x1A3;
+    _canIdMirror           = 0x1A4;
+    _canIdAlarm            = 0x1A5;
+
+    memset(&_windowDuty,  0, sizeof(_windowDuty));
+    memset(&_sunroofDuty, 0, sizeof(_sunroofDuty));
+    memset(&_mirrorDuty,  0, sizeof(_mirrorDuty));
+}
 
 void VehicleControl::begin() {
-    Serial.println("[CTRL] Vehicle Control آماده شد (v2.0 - profile-driven)");
+    Serial.println("[CTRL] Vehicle Control ready (profile-driven)");
 }
 
-// ======================== ارسال پیام حل‌شده (مسیر جدید) ========================
+// ============================================================================
+// Message dispatch
+// ============================================================================
 
 bool VehicleControl::_sendResolvedMessage(const CanMessage& msg) {
     if (getConfig()->listenOnlyMode) {
-        Serial.println("⚠️ [CTRL] حالت Listen-Only فعال است - دستور ارسال نشد");
+        Serial.println("[CTRL] Listen-Only mode active - command not sent");
         _lastError = 1;
-        _lastErrorMessage = "حالت Listen-Only فعال است";
+        _lastErrorMessage = "Listen-Only mode is active";
         return false;
     }
-    
-    // اصلاحیه (حفظ‌شده از v1.0): جلوگیری از ارسال فرمان‌های فیزیکی
-    // با سرعت خیلی بالا که می‌تواند به موتورهای شیشه/قفل درب فشار
-    // مکانیکی غیرعادی وارد کند.
+
     uint32_t now = millis();
     if (now - _lastCommandTime < MIN_COMMAND_INTERVAL_MS) {
-        Serial.println("⚠️ [CTRL] فرمان خیلی سریع پشت‌سرهم - نادیده گرفته شد (rate limit)");
+        Serial.println("[CTRL] Command rejected - rate limit");
         _lastError = 3;
-        _lastErrorMessage = "فرمان‌ها خیلی سریع پشت‌سرهم ارسال شدند (rate limit)";
+        _lastErrorMessage = "Commands sent too rapidly (rate limit)";
         return false;
     }
     _lastCommandTime = now;
-    
+
     if (_can.sendMessage(msg)) {
-        Serial.printf("[CTRL] فرمان ارسال شد: ID=0x%03X, داده=", msg.id);
+        Serial.printf("[CTRL] Command sent: ID=0x%03X, data=", msg.id);
         for (int i = 0; i < msg.length; i++) {
             Serial.printf("%02X ", msg.data[i]);
         }
@@ -70,35 +71,126 @@ bool VehicleControl::_sendResolvedMessage(const CanMessage& msg) {
         _lastErrorMessage = "";
         return true;
     }
-    
+
     _lastError = 2;
-    _lastErrorMessage = "ارسال روی CAN Bus ناموفق بود";
+    _lastErrorMessage = "CAN Bus send failed";
     return false;
 }
 
-// ======================== ارسال legacy (سازگاری عقب‌رو) ========================
-
 bool VehicleControl::_sendLegacyCommand(uint32_t canId, const uint8_t* data, uint8_t length) {
     CanMessage msg;
-    msg.id = canId;
-    msg.isExtended = false;
-    msg.isRemote = false;
-    msg.length = length;
+    msg.id          = canId;
+    msg.isExtended  = false;
+    msg.isRemote    = false;
+    msg.length      = length;
     for (int i = 0; i < length && i < 8; i++) {
         msg.data[i] = data[i];
     }
     return _sendResolvedMessage(msg);
 }
 
-// ======================== اجرای یک برچسب ========================
+// ============================================================================
+// Mechanical duty-cycle protection
+// ============================================================================
+//
+// Prevents sustained or rapid-fire activation of a single motorized
+// actuator (window/sunroof/mirror), which MIN_COMMAND_INTERVAL_MS alone
+// does not cover - it only spaces out consecutive commands regardless of
+// target actuator.
+//
+// A circular buffer of activation timestamps is kept per actuator class.
+// Once ACTUATOR_DUTY_MAX_ACTIVATIONS occur within ACTUATOR_DUTY_WINDOW_MS,
+// a cooldown starts during which no further command for that class is
+// accepted, regardless of direction (up/down, open/close).
+//
+// NOTE: this is a software-level approximation, not a real current/
+// temperature measurement. The defaults (6 activations / 10s, 5s cooldown)
+// are conservative starting points and may need tuning per vehicle.
+
+VehicleControl::ActuatorDutyState* VehicleControl::_dutyStateFor(ActuatorClass cls) {
+    switch (cls) {
+        case ACTUATOR_WINDOW:  return &_windowDuty;
+        case ACTUATOR_SUNROOF: return &_sunroofDuty;
+        case ACTUATOR_MIRROR:  return &_mirrorDuty;
+        default:                return nullptr;
+    }
+}
+
+VehicleControl::ActuatorClass VehicleControl::_classifyLabel(const char* label) {
+    if (!label) return ACTUATOR_NONE;
+    // Prefixes match the CMD_LABEL_* constants in custom_vehicle.h.
+    // A free-text custom label that doesn't use these prefixes will not
+    // be classified here, and will only get the base rate limit above.
+    if (strncmp(label, "window_",  7) == 0) return ACTUATOR_WINDOW;
+    if (strncmp(label, "sunroof_", 8) == 0) return ACTUATOR_SUNROOF;
+    if (strncmp(label, "mirror_",  7) == 0) return ACTUATOR_MIRROR;
+    return ACTUATOR_NONE;
+}
+
+bool VehicleControl::_checkAndRecordDutyCycle(ActuatorClass cls, String& outErrorReason) {
+    ActuatorDutyState* state = _dutyStateFor(cls);
+    if (!state) return true;  // ACTUATOR_NONE: no limit applies
+
+    uint32_t now = millis();
+
+    // Reject outright while cooling down
+    if (state->cooldownUntil != 0) {
+        if (now < state->cooldownUntil) {
+            outErrorReason = "This component needs a brief rest after recent repeated use";
+            return false;
+        }
+        // Cooldown elapsed - reset for a fresh window
+        state->cooldownUntil = 0;
+        state->count    = 0;
+        state->nextSlot = 0;
+    }
+
+    // Count activations still inside the rolling window (no array
+    // compaction needed - just a conditional count)
+    uint8_t recentCount = 0;
+    for (uint8_t i = 0; i < state->count; i++) {
+        if (now - state->activationTimestamps[i] <= ACTUATOR_DUTY_WINDOW_MS) {
+            recentCount++;
+        }
+    }
+
+    if (recentCount >= ACTUATOR_DUTY_MAX_ACTIVATIONS) {
+        state->cooldownUntil = now + ACTUATOR_DUTY_COOLDOWN_MS;
+        outErrorReason = "Too many activations in a short period - please wait a few seconds";
+        return false;
+    }
+
+    // Record this activation
+    state->activationTimestamps[state->nextSlot] = now;
+    state->nextSlot = (state->nextSlot + 1) % ACTUATOR_DUTY_MAX_ACTIVATIONS;
+    if (state->count < ACTUATOR_DUTY_MAX_ACTIVATIONS) {
+        state->count++;
+    }
+
+    return true;
+}
+
+// ============================================================================
+// Label execution
+// ============================================================================
 
 bool VehicleControl::_execute(const char* label, String& outErrorReason) {
+    // Runs before either dispatch path (legacy or ActiveProfileManager),
+    // since the goal is protecting the physical motor regardless of
+    // which software path resolved the command.
+    ActuatorClass cls = _classifyLabel(label);
+    if (cls != ACTUATOR_NONE) {
+        if (!_checkAndRecordDutyCycle(cls, outErrorReason)) {
+            _lastError = 4;
+            _lastErrorMessage = outErrorReason;
+            return false;
+        }
+    }
+
     if (_legacyOverrideActive) {
-        // مسیر سازگاری عقب‌رو: نگاشت برچسب‌های شناخته‌شده به CAN
-        // ID های legacy تنظیم‌شده با setCustomCANIDs(). این مسیر
-        // چرخه‌ی تأیید UNVERIFIED/VERIFIED را ندارد چون از قبل (در
-        // v1.0) هم نداشت - برای همین در مستندات به کاربر توصیه شده
-        // به‌جای این تابع از ورود دستی جدید استفاده کند.
+        // Legacy path: known labels map to fixed CAN IDs set via
+        // setCustomCANIDs(). Does not go through the UNVERIFIED/VERIFIED
+        // gate - prefer manual entry instead where possible.
         if (strcmp(label, CMD_LABEL_LOCK_ALL) == 0) {
             uint8_t d[] = {0x01};
             return _sendLegacyCommand(_canIdDoorLock, d, 1);
@@ -145,32 +237,34 @@ bool VehicleControl::_execute(const char* label, String& outErrorReason) {
             // window_fl_up, window_fr_down, ...
             uint8_t winIdx = 0xFF;
             bool up = strstr(label, "_up") != nullptr;
-            if (strstr(label, "fl")) winIdx = 0;
+            if (strstr(label, "fl"))      winIdx = 0;
             else if (strstr(label, "fr")) winIdx = 1;
             else if (strstr(label, "rl")) winIdx = 2;
             else if (strstr(label, "rr")) winIdx = 3;
             if (winIdx == 0xFF) {
-                outErrorReason = "شناسه شیشه در برچسب legacy قابل تشخیص نبود";
+                outErrorReason = "Could not determine window index from legacy label";
                 return false;
             }
             uint8_t d[] = {winIdx, (uint8_t)(up ? 0x01 : 0x02)};
             return _sendLegacyCommand(_canIdWindow, d, 2);
         }
-        
-        outErrorReason = "این برچسب در مسیر سازگاری legacy پشتیبانی نمی‌شود";
+
+        outErrorReason = "This label is not supported on the legacy compatibility path";
         return false;
     }
-    
-    // === مسیر اصلی v2.0: از ActiveProfileManager بخواه ===
+
+    // Primary path: resolve through ActiveProfileManager
     CanMessage msg;
     if (!_profileManager.resolveCommand(label, msg, outErrorReason)) {
         return false;
     }
-    
+
     return _sendResolvedMessage(msg);
 }
 
-// ======================== executeCommand (عمومی) ========================
+// ============================================================================
+// Public execute API
+// ============================================================================
 
 bool VehicleControl::executeCommand(const char* commandLabel) {
     String reason;
@@ -181,13 +275,15 @@ bool VehicleControl::executeCommand(const char* commandLabel, String& outErrorRe
     bool result = _execute(commandLabel, outErrorReason);
     if (!result && outErrorReason.length() > 0) {
         _lastErrorMessage = outErrorReason;
-        Serial.printf("⚠️ [CTRL] اجرای فرمان '%s' ناموفق: %s\n", 
+        Serial.printf("[CTRL] Command '%s' failed: %s\n",
                       commandLabel, outErrorReason.c_str());
     }
     return result;
 }
 
-// ======================== توابع سازگاری v1.0 ========================
+// ============================================================================
+// Convenience wrappers
+// ============================================================================
 
 bool VehicleControl::lockAllDoors() {
     return executeCommand(CMD_LABEL_LOCK_ALL);
@@ -263,29 +359,31 @@ bool VehicleControl::alarmDisarm() {
     return executeCommand(CMD_LABEL_ALARM_DISARM);
 }
 
-// ======================== توقف همه ========================
+// ============================================================================
+// Stop all
+// ============================================================================
 
 bool VehicleControl::stopAll() {
-    // best-effort: فقط در حالت legacy override معنای مستقیم دارد
-    // (طبق مستندات کلاس). اگر در حالت پروفایل جدید هستیم و برچسب
-    // مخصوصی برای توقف یادگرفته نشده، این تابع false برمی‌گرداند
-    // به‌جای حدس زدن یک CAN ID.
+    // Best-effort, legacy-only: without a learned "stop" command, this
+    // returns false rather than guessing a CAN ID under a custom profile.
     if (!_legacyOverrideActive) {
-        _lastErrorMessage = "توقف عمومی فقط در حالت legacy یا با فرمان‌های "
-                            "مخصوص یادگرفته‌شده پشتیبانی می‌شود";
+        _lastErrorMessage = "Stop-all is only supported in legacy mode "
+                             "or via specific learned commands";
         return false;
     }
-    
+
     uint8_t data[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
     bool result = true;
     result &= _sendLegacyCommand(_canIdDoorLock, data, 8);
-    result &= _sendLegacyCommand(_canIdWindow, data, 8);
-    result &= _sendLegacyCommand(_canIdSunroof, data, 8);
-    result &= _sendLegacyCommand(_canIdTrunk, data, 8);
+    result &= _sendLegacyCommand(_canIdWindow,   data, 8);
+    result &= _sendLegacyCommand(_canIdSunroof,  data, 8);
+    result &= _sendLegacyCommand(_canIdTrunk,    data, 8);
     return result;
 }
 
-// ======================== تنظیم CAN IDهای سفارشی (legacy) ========================
+// ============================================================================
+// Legacy CAN ID override
+// ============================================================================
 
 void VehicleControl::setCustomCANIDs(uint32_t doorLock, uint32_t window,
                                       uint32_t sunroof, uint32_t trunk,
@@ -297,17 +395,19 @@ void VehicleControl::setCustomCANIDs(uint32_t doorLock, uint32_t window,
     _canIdMirror   = mirror;
     _canIdAlarm    = alarm;
     _legacyOverrideActive = true;
-    
-    Serial.println("[CTRL] حالت override دستی legacy فعال شد - CAN IDهای سفارشی:");
-    Serial.printf("  DoorLock=0x%03X, Window=0x%03X, Sunroof=0x%03X\n", 
+
+    Serial.println("[CTRL] Legacy manual override enabled - custom CAN IDs:");
+    Serial.printf("  DoorLock=0x%03X, Window=0x%03X, Sunroof=0x%03X\n",
                   doorLock, window, sunroof);
     Serial.printf("  Trunk=0x%03X, Mirror=0x%03X, Alarm=0x%03X\n",
                   trunk, mirror, alarm);
-    Serial.println("⚠️ [CTRL] توجه: مسیر legacy از چرخه‌ی تأیید UNVERIFIED/VERIFIED "
-                   "عبور نمی‌کند. برای ایمنی بیشتر، «ورود دستی» در بخش «فرمان‌های من» را ترجیح دهید.");
+    Serial.println("[CTRL] Note: the legacy path bypasses the UNVERIFIED/VERIFIED "
+                    "safety gate. Prefer manual entry under 'My Commands' instead.");
 }
 
-// ======================== آخرین خطا ========================
+// ============================================================================
+// Error accessors
+// ============================================================================
 
 uint8_t VehicleControl::getLastError() {
     return _lastError;
