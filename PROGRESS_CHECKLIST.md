@@ -1,83 +1,102 @@
-# وضعیت اصلاحات چک‌لیست تجاری CarTouch
+# Commercial Readiness Checklist - Progress
 
-این فایل پیگیری می‌کند که از ۲۰ موردِ چک‌لیستِ اصلاحات نسخه‌ی تجاری،
-کدام‌ها انجام شده، کدام‌ها در دست اقدام‌اند، و کدام‌ها اساساً نیاز به
-کاری فراتر از کدنویسی (سخت‌افزار، گواهی قانونی، تست میدانی) دارند.
+Tracks the 20-item commercial-readiness checklist: what's done, what's
+in progress, and what's out of scope for code changes entirely
+(hardware, legal certification, field testing).
 
-⚠️ **صادقانه:** این تغییرات به‌صورت دستی/منطقی بررسی و با یک شبیه‌سازی
-مستقل خارج از پروژه (برای مورد #۶) تست شده‌اند، اما به دلیل محدودیت
-شبکه‌ی محیط توسعه، **با toolchain واقعی PlatformIO/ESP-IDF کامپایل
-نشده‌اند و روی سخت‌افزار واقعی تست نشده‌اند.** قبل از فلش روی دستگاه
-واقعی، حتماً یک‌بار `pio run` را خودتان اجرا کنید و خطاهای احتمالی
-کامپایل را برطرف کنید.
-
----
-
-## ✅ کامل شده
-
-| # | مورد | فایل‌های تغییریافته | خلاصه |
-|---|------|----------------------|-------|
-| 2 | Task Watchdog | `main.cpp` | `esp_task_wdt` با timeout ۸ ثانیه؛ `esp_task_wdt_reset()` در ابتدای هر `loop()`. با شرط‌گذاری روی نسخه‌ی Arduino-ESP32 core (۲.x در برابر ۳.x) برای سازگاری با هر دو زنجیره‌ی ابزار |
-| 4 | OBD2 غیرمسدودکننده | `obd2_reader.h`, `obd2_reader.cpp`, `main.cpp` | بازنویسی کامل به state machine؛ صفر `delay()` در مسیر اصلی |
-| 6 | Motorola/Intel Endianness | `vehicle_db.h`, `vehicle_db.cpp` | نگاشت بیت واقعی برای هر دو نوع؛ تست مستقل تأییدشده |
-| 7 | اتصال فایل‌های DBC | `vehicle_db.h`, `vehicle_db.cpp` | از ۴ به ۳۸ خودرو (از ۵۷ فایل)؛ مستندسازی صادقانه‌ی حذف‌شده‌ها |
-| 8 | سقف پیام DBC (۵۰) | `vehicle_db.h`, `main.cpp` | افزایش به ۱۵۰. آبجکت `vehicleDB` (که با این افزایش حدود ۴۶۰ کیلوبایت شد) اکنون به‌صورت پوینتر با `new` در `setup()` ساخته می‌شود تا از PSRAM سرو شود (نگاه کنید به یادداشت رفع باگ DRAM overflow زیر) |
-| 9 | کالیبراسیون تاچ | `tft_ui.h`, `tft_ui.cpp`, `config.h`, `config.cpp` | کالیبراسیون واقعی ۵نقطه‌ای با `calibrateTouch()`، ذخیره در حافظه‌ی غیرفرار، دکمه‌ی کالیبراسیون مجدد در تنظیمات |
-| 20 | همگام‌سازی Session (TFT/وب) | `config.h`, `config.cpp`, `webserver.h`, `webserver.cpp` | callback سراسری؛ تغییر رمز از هر مسیر، همه‌ی session های وب (HTTP + WebSocket) را باطل می‌کند |
-
-## 🔍 کشف‌های مهم حین بررسی
-
-- **مورد #۱۱ (OTA)** در کد موجود از قبل به‌طور کامل پیاده‌سازی شده
-  بود (`/update` endpoint، آپلود firmware.bin/spiffs.bin) - مستندات
-  قدیمی که می‌گفت "OTA نداریم" اشتباه/قدیمی بود؛ در این نسخه از
-  مستندات اصلاح شد.
-
-- **باگ لینکر DRAM overflow (رفع‌شده در طول توسعه):** نسخه‌ی اولیه‌ی
-  رفع مورد #۸ از `EXT_RAM_BSS_ATTR` روی یک آبجکت global استفاده کرده
-  بود. این attribute فقط زمانی واقعاً به PSRAM می‌رود که
-  `CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY` در sdkconfig فعال
-  باشد؛ در کتابخانه‌های از پیش کامپایل‌شده‌ی Arduino-ESP32 که
-  PlatformIO دانلود می‌کند این گزینه فعال نیست، پس attribute بی‌صدا
-  نادیده گرفته می‌شد و کل حجم همچنان در DRAM داخلی می‌ماند → خطای
-  لینک «region dram0_0_seg overflowed». **راه‌حل نهایی:** `vehicleDB`
-  و وابسته‌هایش (`activeProfileManager`, `vehicleControl`) به پوینتر
-  تبدیل شدند و با `new` در ابتدای `setup()` ساخته می‌شوند؛ هسته‌ی
-  Arduino-ESP32 با PSRAM فعال، تخصیص‌های بزرگ‌تر از ۴ کیلوبایت را
-  به‌طور خودکار از PSRAM می‌دهد - بدون نیاز به attribute خاص.
-
-- **باگ کامپایل TFT_UI (رفع‌شده در طول توسعه):** اشاره‌گر استاتیک
-  `pThisUI` که تمام callback های لمسی (دکمه‌ها، صفحه‌ی رمز، Learn
-  Wizard) به آن وابسته‌اند، در تبدیل پروژه از v1.0 به v2.0 به‌اشتباه
-  حذف شده بود. دوباره اضافه شد.
-
-## 🔴 هنوز باقی‌مانده (نیاز به ادامه‌ی کار کدنویسی)
-
-| # | مورد | وضعیت |
-|---|------|-------|
-| 1 | HTTPS/TLS | شروع نشده - نیاز به بررسی امکان mbedTLS روی ESP32-S3 با این حجم RAM باقیمانده |
-| 3 | Hardware-enforced Listen-Only | جزئی: enforcement نرم‌افزاری هست؛ uninstall/reinstall کامل درایور TWAI حین تغییر mode هنوز پیاده نشده |
-| 5 | Rolling code / امنیت خودروهای جدید | **غیرقابل حل با کد** - نیاز به مهندسی معکوس سطح ECU در حد هر خودرو |
-| 10 | مستندسازی محدودیت فرمان DBC | فقط مستندسازی - کد نیاز ندارد (در README/SPEC مستند شده) |
-| 12 | Secure Boot / Flash Encryption | شروع نشده |
-| 13 | Device provisioning/pairing امن | شروع نشده |
-| 14 | Auto-detect پروتکل (ISO9141/KWP2000) | شروع نشده |
-| 15 | گواهی EMC/قانونی | **غیرقابل حل با کد** - نیاز به آزمایشگاه گواهی و هزینه‌ی رسمی |
-| 16 | Error logging/telemetry | شروع نشده |
-| 17 | مسئولیت حقوقی/Disclaimer | **غیرقابل حل با کد** - نیاز به مشاوره‌ی حقوقی |
-| 18 | تست میدانی روی fleet واقعی | **غیرقابل حل بدون سخت‌افزار/خودرو واقعی** |
-| 19 | Duty-cycle مکانیکی (تقویت) | rate-limit نرم‌افزاری ساده هست؛ شمارشگر تجمعی/سایش هنوز نیست |
-
-## 📄 وضعیت مستندات (این دور)
-
-- `README.md`: ✅ به‌روزرسانی کامل - بخش «وضعیت و محدودیت‌ها» با
-  کد فعلی هماهنگ شد، ادعای غلط «OTA نداریم» حذف شد، ساختار پروژه
-  به‌روز شد.
-- `PROGRESS_CHECKLIST.md`: ✅ همین فایل - دو رفع‌باگ کشف‌شده در طول
-  توسعه اضافه شد.
-- `CHANGELOG.md`: در دست اقدام.
-- `CarTouch_SPEC.md`: در دست اقدام.
-- کامنت‌های فارسی در فایل‌های سورس (`src/*.cpp`, `src/*.h`): در دست
-  اقدام - طبق دستور، به انگلیسی فنی تبدیل و با کد فعلی همگام می‌شوند.
+> These changes have been reviewed manually/logically (item 6 was
+> additionally verified with an independent simulation) but have **not
+> been compiled with the real PlatformIO/ESP-IDF toolchain or tested on
+> hardware**, due to network restrictions in the development
+> environment. Run `pio run` yourself before flashing a real device.
 
 ---
-*آخرین به‌روزرسانی: دور دوم (هماهنگ‌سازی مستندات با کد فعلی + دو رفع‌باگ کشف‌شده)*
+
+## Done
+
+| # | Item | Files | Summary |
+|---|------|-------|---------|
+| 2  | Task watchdog | `main.cpp` | `esp_task_wdt`, 8s timeout; `esp_task_wdt_reset()` at the top of `loop()`. Version-gated for both Arduino-ESP32 2.x and 3.x |
+| 3  | Hardware-enforced Listen-Only | `can_manager.h/.cpp`, `main.cpp` | `reconfigureMode()` performs a real TWAI driver uninstall/reinstall to switch mode at runtime; wired into the `listen_only` command handler |
+| 4  | Non-blocking OBD-II | `obd2_reader.h/.cpp`, `main.cpp` | Rewritten as a state machine; zero `delay()` on the main path |
+| 6  | Motorola/Intel endianness | `vehicle_db.h/.cpp` | Real bit-mapping for both signal byte orders; verified with an independent simulation |
+| 7  | DBC vehicle list | `vehicle_db.h/.cpp` | 4 -> 38 vehicles wired (of 57 bundled files); omissions documented with reasons |
+| 8  | DBC message cap (was 50) | `vehicle_db.h`, `main.cpp` | Raised to 150; `vehicleDB` (~460 KB at this size) now heap-allocated to be served from PSRAM |
+| 9  | Touch calibration | `tft_ui.h/.cpp`, `config.h/.cpp` | Real 5-point `calibrateTouch()` wizard on first boot, persisted to NVS, re-run button in Settings |
+| 19 | Mechanical duty-cycle | `vehicle_control.h/.cpp` | Per-actuator-class cumulative activation limit + cooldown, on top of the existing flat rate limit |
+| 20 | TFT/web session sync | `config.h/.cpp`, `webserver.h/.cpp` | Global callback: a password change from either interface invalidates all web sessions (HTTP + WebSocket) |
+
+## Notable discoveries during review
+
+- **Item 11 (OTA)** was already fully implemented (`/update` endpoint,
+  firmware.bin/spiffs.bin upload) - older docs claiming "no OTA" were
+  simply wrong/stale, and have been corrected.
+
+- **DRAM overflow linker bug (fixed during development):** an earlier
+  attempt at item 8 used `EXT_RAM_BSS_ATTR` on a global object. This
+  attribute only actually places data in PSRAM when
+  `CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY` is enabled in sdkconfig,
+  which the prebuilt Arduino-ESP32 core PlatformIO downloads does not
+  enable - so the attribute was silently ignored and the full ~460 KB
+  stayed in internal DRAM, overflowing it at link time. **Fix:**
+  `vehicleDB` and its dependents (`activeProfileManager`,
+  `vehicleControl`) were converted to heap-allocated pointers created
+  with `new` in `setup()`; with PSRAM enabled, the Arduino-ESP32 core
+  automatically serves allocations over 4 KB from PSRAM with no special
+  attribute required.
+
+- **TFT_UI compile bug (fixed during development):** the static
+  `pThisUI` pointer that every touch callback (buttons, password
+  screen, Learn Wizard) depends on had been dropped during the v1.0 ->
+  v2.0 conversion. Restored.
+
+## Not yet done
+
+| # | Item | Status |
+|---|------|--------|
+| 1  | HTTPS/TLS | **Investigated, deliberately deferred** - see note below |
+| 5  | Rolling code / newer-vehicle security | **Out of scope for code** - requires per-vehicle ECU reverse engineering |
+| 10 | Documenting the DBC write-command limitation | Docs only, no code needed (covered in README/SPEC) |
+| 12 | Secure Boot / Flash Encryption | Not started |
+| 13 | Secure device provisioning/pairing | Not started |
+| 14 | Legacy protocol auto-detect (ISO9141/KWP2000) | Not started |
+| 15 | EMC / regulatory certification | **Out of scope for code** - requires a certification lab |
+| 16 | Error logging / telemetry | Not started |
+| 17 | Legal liability / disclaimer | **Out of scope for code** - requires legal counsel |
+| 18 | Field testing on a real fleet | **Out of scope without hardware and vehicles** |
+
+### Item 1 (HTTPS) - why it's deferred, not just "not started"
+
+Researched three options; none fit a safe, incremental change in this
+codebase:
+
+- **AsyncTCP_SSL** (the option the project's own `platformio.ini`
+  comment pointed to) has been unmaintained since 2022 and does not
+  compile against the mbedTLS version shipped with current ESP32-S3
+  cores - a known, open upstream issue.
+- **ESPAsyncTCP / AsyncSSLWebServer** are archived and ESP8266-only, not
+  ESP32.
+- The only actively-working option, **esp32_https_server**, is a
+  synchronous (non-async) library with a completely different API.
+  Adopting it means rewriting `webserver.cpp` (600+ lines: routes,
+  WebSocket, OTA) around a different architecture - too large and risky
+  a change to attempt safely in a single limited session.
+
+Realistic paths forward: (a) terminate TLS in front of the device with a
+reverse proxy (e.g. on a home router/Raspberry Pi) rather than on the
+ESP32 itself; (b) a dedicated future session to rewrite `webserver.cpp`
+against `esp32_https_server`. Both are legitimate; neither is a small
+patch.
+
+## Documentation status
+
+- `README.md` - rewritten to match current code; the stale "no OTA"
+  claim removed.
+- `CHANGELOG.md` - v2.1 section added; known-issues list reconciled.
+- `CarTouch_SPEC.md` - stale sections patched (7.2, 11.2, 12).
+- `PROGRESS_CHECKLIST.md` - this file.
+- Source comments (`src/*.cpp`, `src/*.h`) - in progress; being
+  translated to concise English and re-synced with current behavior as
+  each file is touched. Completed so far: `can_manager.*`,
+  `vehicle_control.*`, `main.cpp`. Remaining files still carry the
+  original Persian comments from earlier sessions.
