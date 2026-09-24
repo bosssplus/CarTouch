@@ -1,26 +1,21 @@
 /**
- * tft_ui.h - رابط کاربری صفحه لمسی با LVGL (CarTouch v2.0)
- * 
- * این ماژول رابط کاربری اصلی پروژه است.
- * از کتابخانه LVGL نسخه 8 برای طراحی رابط گرافیکی استفاده می‌کند.
- * 
- * صفحه دارای چهار تب اصلی است (تب چهارم جدید در v2.0):
- *   1. کنترل (Control) - دکمه‌های کنترلی بزرگ
- *   2. داشبورد (Dashboard) - نمایش اطلاعات خودرو
- *   3. تنظیمات (Settings) - تنظیمات دستگاه
- *   4. یادگیری (Learn) - یادگیری فرمان از CAN Bus واقعی + ورود دستی +
- *      لیست پروفایل‌های سفارشی با وضعیت تأیید (جدید - به
- *      CarTouch_V2_SPEC.md بخش ۷.۴ مراجعه کنید)
- * 
- * === معماری اتصال به Learn Mode ===
- * برای حفظ جدایی لایه‌ها (مثل الگوی UIControlCallback موجود)، این
- * کلاس مستقیماً وابسته به LearnEngine/CustomVehicleStore نیست، بلکه
- * از طریق پوینتر (که main.cpp تزریق می‌کند) با آن‌ها کار می‌کند - این
- * تصمیم طراحی باعث می‌شود tft_ui.h نیازی به include کردن تمام
- * هدرهای Learn Mode نداشته باشد و کدی که از قبل کامپایل می‌شد کمتر
- * دستخوش تغییر بی‌جهت شود.
- * 
- * تمام توابع این فایل تست شده و آماده استفاده هستند.
+ * tft_ui.h - Touchscreen UI, built on LVGL (CarTouch v2.0)
+ *
+ * The project's primary user interface, using LVGL 8.
+ *
+ * Four main tabs:
+ *   1. Control   - large control buttons
+ *   2. Dashboard - live vehicle data
+ *   3. Settings  - device settings
+ *   4. Learn     - learn a command from live CAN traffic, manual entry,
+ *                  and the custom-profile list with verification status
+ *                  (see CarTouch_SPEC.md section 7.4)
+ *
+ * Learn Mode wiring: to keep layers decoupled (matching the existing
+ * UIControlCallback pattern), this class does not depend directly on
+ * LearnEngine/CustomVehicleStore - it holds pointers injected by
+ * main.cpp instead, via attachLearnModules(). This keeps tft_ui.h free
+ * of the full Learn Mode header set.
  */
 
 #ifndef TFT_UI_H
@@ -30,173 +25,128 @@
 #include <lvgl.h>
 #include "config.h"
 
-// پیش‌تعریف callbackها برای جلوگیری از خطای کامپایل
 typedef void (*UIControlCallback)(const char* command);
 
-// پیش‌اعلان (forward declaration) کلاس‌های Learn Mode - جزئیات در
-// main.cpp/learn_engine.h/custom_vehicle_store.h
+// Forward declarations - full definitions in main.cpp / learn_engine.h /
+// custom_vehicle_store.h
 class LearnEngine;
 class CustomVehicleStore;
 class ActiveProfileManager;
 class VehicleControl;
 
-/**
- * کلاس رابط کاربری TFT
- */
 class TFT_UI {
 public:
-    /**
-     * سازنده
-     */
     TFT_UI();
-    
-    /**
-     * مقداردهی اولیه صفحه نمایش و LVGL
-     */
+
+    /** Initializes the display and LVGL. */
     void begin();
-    
-    /**
-     * به‌روزرسانی صفحه (در حلقه اصلی صدا زده شود)
-     */
+
+    /** Call every loop() iteration. */
     void update();
-    
-    /**
-     * تنظیم callback برای ارسال فرمان
-     * @param cb تابع callback
-     */
+
     void setControlCallback(UIControlCallback cb);
-    
+
     /**
-     * === جدید v2.0 ===
-     * اتصال ماژول‌های Learn Mode. باید قبل از begin() صدا زده شود
-     * (مشابه الگوی attachLearnModules در WebServerManager).
+     * Attaches the Learn Mode modules. Must be called before begin()
+     * (same pattern as WebServerManager::attachLearnModules).
      */
     void attachLearnModules(LearnEngine* learnEngine,
-                            CustomVehicleStore* customStore,
-                            ActiveProfileManager* profileManager,
-                            VehicleControl* vehicleControl);
-    
-    /**
-     * به‌روزرسانی اطلاعات نمایش داده شده در Dashboard
-     * @param data داده‌های خودرو
-     */
+                             CustomVehicleStore* customStore,
+                             ActiveProfileManager* profileManager,
+                             VehicleControl* vehicleControl);
+
     void updateVehicleData(const VehicleData& data);
-    
-    /**
-     * تنظیم وضعیت اتصال CAN
-     * @param connected true اگر وصل است
-     */
     void setCANStatus(bool connected);
-    
-    /**
-     * تنظیم وضعیت WiFi
-     * @param connected true اگر وصل است
-     */
     void setWiFiStatus(bool connected);
-    
-    /**
-     * تنظیم حالت شب/روز
-     * @param mode حالت
-     */
     void setTheme(ThemeMode mode);
-    
-    /**
-     * نمایش نوتیفیکیشن (پیام کوتاه)
-     * @param message متن پیام
-     */
     void showNotification(const char* message);
-    
-    /**
-     * تنظیم حالت دستگاه
-     */
     void setDeviceMode(DeviceMode mode);
 
     /**
-     * === جدید (چک‌لیست تجاری #9: کالیبراسیون واقعی تاچ‌اسکرین) ===
-     * اجرای فرآیند کالیبراسیون تعاملی (۵ نقطه، با استفاده از
-     * calibrateTouch() خود کتابخانه‌ی TFT_eSPI). نتیجه در AppConfig
-     * (touchCalData/touchCalibrated) ذخیره می‌شود تا در بوت‌های بعدی
-     * دوباره لازم نباشد. این تابع مسدودکننده است (منتظر لمس کاربر در
-     * ۵ نقطه می‌ماند) و باید فقط از setup() یا از منوی تنظیمات (که
-     * کاربر عمداً آن را خواسته) صدا زده شود - هرگز از داخل loop()
-     * اصلی به‌صورت خودکار در میانه‌ی کار عادی دستگاه.
+     * Runs the interactive touch calibration flow (5 points, via
+     * TFT_eSPI's calibrateTouch()). The result is stored in AppConfig
+     * (touchCalData/touchCalibrated) so it isn't needed again on
+     * subsequent boots. This call is blocking - it waits for the user
+     * to touch 5 points - and must only be invoked from setup() or from
+     * a settings menu the user explicitly triggered, never
+     * automatically mid-operation from the main loop.
      */
     void runTouchCalibration();
 
 private:
-    bool _initialized;
-    UIControlCallback _controlCallback;
-    VehicleData _vehicleData;
-    DeviceMode _currentMode;
-    
-    // === جدید v2.0: پوینترهای ماژول‌های Learn Mode ===
-    LearnEngine* _learnEngine;
-    CustomVehicleStore* _customStore;
-    ActiveProfileManager* _profileManager;
-    VehicleControl* _vehicleControl;
-    
-    // LVGL objects
+    bool               _initialized;
+    UIControlCallback  _controlCallback;
+    VehicleData        _vehicleData;
+    DeviceMode          _currentMode;
+
+    // -- Learn Mode module pointers --------------------------------------------
+    LearnEngine*            _learnEngine;
+    CustomVehicleStore*      _customStore;
+    ActiveProfileManager*    _profileManager;
+    VehicleControl*           _vehicleControl;
+
+    // -- LVGL objects: tabs ------------------------------------------------------
     lv_obj_t* _tabView;
     lv_obj_t* _tabControl;
     lv_obj_t* _tabDashboard;
     lv_obj_t* _tabSettings;
-    lv_obj_t* _tabLearn;           // === جدید v2.0 ===
-    
-    // Dashboard labels
+    lv_obj_t* _tabLearn;
+
+    // -- Dashboard labels -------------------------------------------------------
     lv_obj_t* _labelSpeed;
     lv_obj_t* _labelRPM;
     lv_obj_t* _labelTemp;
     lv_obj_t* _labelVolt;
     lv_obj_t* _labelFuel;
-    
-    // Status indicators
+
+    // -- Status indicators --------------------------------------------------------
     lv_obj_t* _statusCAN;
     lv_obj_t* _statusWiFi;
     lv_obj_t* _notification;
-    
-    // ==================== صفحه تغییر رمز (v1.0 - بدون تغییر) ====================
+
+    // -- Password change screen --------------------------------------------------
     lv_obj_t* _passwordScreen;
     lv_obj_t* _passwordWarningLabel;
     lv_obj_t* _taNewPass;
     lv_obj_t* _taConfirmPass;
     lv_obj_t* _passwordErrorLabel;
-    lv_obj_t* _keyboard;             // کیبورد مجازی مشترک (هم برای رمز، هم برای Learn Mode استفاده می‌شود)
-    
-    // ==================== جدید v2.0: تب یادگیری ====================
-    // زیرصفحه‌ی اصلی تب: لیست وسایل نقلیه سفارشی + دکمه "یادگیری جدید" + "ورود دستی"
+    lv_obj_t* _keyboard;   // Shared virtual keyboard (password screen + Learn Mode)
+
+    // -- Learn tab: main view ------------------------------------------------------
     lv_obj_t* _learnMainContainer;
-    lv_obj_t* _learnVehicleList;      // لیست پروفایل‌های سفارشی با وضعیت
+    lv_obj_t* _learnVehicleList;    // Custom profile list, with status
     lv_obj_t* _learnActiveVehicleLabel;
-    
-    // مودال Wizard یادگیری (state machine بخش ۴.۱ سند)
+
+    // -- Learn tab: wizard modal ----------------------------------------------------
     lv_obj_t* _learnWizardScreen;
     lv_obj_t* _learnWizardTitle;
     lv_obj_t* _learnWizardStatusLabel;
     lv_obj_t* _learnWizardProgressBar;
-    lv_obj_t* _learnWizardCandidateList; // لیست کاندیدها بعد از capture
-    lv_obj_t* _learnWizardActionBtn;     // دکمه‌ی متن‌متغیر (شروع/ادامه/تأیید)
+    lv_obj_t* _learnWizardCandidateList;  // Candidates found after capture
+    lv_obj_t* _learnWizardActionBtn;       // Label changes: Start/Continue/Confirm
     lv_obj_t* _learnWizardCancelBtn;
-    lv_obj_t* _learnLabelDropdown;       // انتخاب برچسب فرمان از پیش‌تعریف‌شده
-    int _selectedCandidateIndex;         // ایندکس کاندید انتخاب‌شده توسط کاربر (-1 = هیچ)
-    
-    // مودال ورود دستی (بخش ۵ سند)
+    lv_obj_t* _learnLabelDropdown;          // Command label picker
+    int        _selectedCandidateIndex;      // -1 = none selected
+
+    // -- Learn tab: manual entry modal -----------------------------------------------
     lv_obj_t* _manualEntryScreen;
     lv_obj_t* _taManualCanId;
     lv_obj_t* _taManualDataHex;
     lv_obj_t* _manualLabelDropdown;
     lv_obj_t* _manualExtendedCheckbox;
     lv_obj_t* _manualErrorLabel;
-    
-    // مودال تأیید فرمان (بخش ۴.۲ سند) - نمایش صریح CAN ID/بایت قبل از ارسال آزمایشی
+
+    // -- Learn tab: verification modal -------------------------------------------------
+    // Shows the exact CAN ID/bytes before a one-shot test send.
     lv_obj_t* _verifyScreen;
     lv_obj_t* _verifyInfoLabel;
     lv_obj_t* _verifyResultLabel;
-    char _verifyProfileId;
-    char _verifyLabel[32];
-    
-    uint8_t _selectedProfileForLearning;  // پروفایلی که در حال یادگیری/ورود دستی برایش هستیم
-    
-    // تابع‌های داخلی برای ساختن صفحات (v1.0)
+    char       _verifyProfileId;
+    char       _verifyLabel[32];
+
+    uint8_t _selectedProfileForLearning;  // Profile currently being learned/entered
+
+    // -- Screen builders --------------------------------------------------------------
     void _buildTabControl();
     void _buildTabDashboard();
     void _buildTabSettings();
@@ -205,31 +155,30 @@ private:
     void _closePasswordScreen();
     void _submitPasswordChange();
     void _refreshPasswordWarning();
-    
-    // === جدید v2.0: تابع‌های داخلی تب یادگیری ===
+
     void _buildTabLearn();
     void _refreshLearnVehicleList();
     void _buildLearnWizardScreen();
     void _openLearnWizard();
     void _closeLearnWizard();
-    void _refreshLearnWizardUI();   // بر اساس learnEngine->getState() نمایش را به‌روز می‌کند
+    void _refreshLearnWizardUI();   // Redraws based on learnEngine->getState()
     void _onLearnWizardActionPressed();
     void _onLearnCandidateSelected(int index);
     void _saveLearnedCommand();
-    
+
     void _buildManualEntryScreen();
     void _openManualEntryScreen();
     void _closeManualEntryScreen();
     void _submitManualEntry();
-    
+
     void _buildVerifyScreen();
-    void _openVerifyScreen(uint8_t profileId, const char* label, uint32_t canId, 
-                           const uint8_t* data, uint8_t length);
+    void _openVerifyScreen(uint8_t profileId, const char* label, uint32_t canId,
+                            const uint8_t* data, uint8_t length);
     void _closeVerifyScreen();
     void _onVerifySendPressed();
     void _onVerifyResultPressed(bool success);
-    
-    // Event handlers (v1.0 - بدون تغییر)
+
+    // -- Event handlers: Control/Settings tabs ---------------------------------------
     static void _btnLockEventHandler(lv_event_t* e);
     static void _btnUnlockEventHandler(lv_event_t* e);
     static void _btnWindowUpEventHandler(lv_event_t* e);
@@ -245,10 +194,9 @@ private:
     static void _btnPasswordSaveEventHandler(lv_event_t* e);
     static void _btnPasswordCancelEventHandler(lv_event_t* e);
     static void _taFocusEventHandler(lv_event_t* e);
-    // === جدید (چک‌لیست تجاری #9) ===
     static void _btnRecalibrateTouchEventHandler(lv_event_t* e);
-    
-    // === جدید v2.0: Event handlers تب یادگیری ===
+
+    // -- Event handlers: Learn tab ---------------------------------------------------
     static void _btnStartLearnEventHandler(lv_event_t* e);
     static void _btnManualEntryEventHandler(lv_event_t* e);
     static void _btnLearnWizardActionEventHandler(lv_event_t* e);
@@ -260,13 +208,12 @@ private:
     static void _btnVerifySuccessEventHandler(lv_event_t* e);
     static void _btnVerifyFailEventHandler(lv_event_t* e);
     static void _vehicleListItemEventHandler(lv_event_t* e);
-    
-    // LVGL display buffer
+
+    // -- LVGL display driver -------------------------------------------------------
     static lv_disp_draw_buf_t _dispBuf;
-    static lv_color_t _buf1[LVGL_BUF_SIZE];
-    static lv_color_t _buf2[LVGL_BUF_SIZE];
-    
-    // توابع display driver
+    static lv_color_t          _buf1[LVGL_BUF_SIZE];
+    static lv_color_t          _buf2[LVGL_BUF_SIZE];
+
     static void _lvglDisplayFlush(lv_disp_drv_t* drv, const lv_area_t* area, lv_color_t* colorMap);
     static void _lvglTouchRead(lv_indev_drv_t* drv, lv_indev_data_t* data);
 };

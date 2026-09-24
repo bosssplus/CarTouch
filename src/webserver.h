@@ -1,25 +1,26 @@
 /**
- * webserver.h - وب سرور و WebSocket برای کنترل خودرو
- * 
- * === اصلاحیه امنیتی مهم (حفظ‌شده از v1.0) ===
- * قبلاً اتصال WebSocket هیچ احراز هویتی نداشت: هرکسی که IP دستگاه را
- * می‌دانست می‌توانست مستقیماً به /ws وصل شود و فرمان قفل/بازکردن درب،
- * صندوق و غیره بفرستد، بدون رد شدن از صفحه لاگین.
+ * webserver.h - Web server and WebSocket vehicle control
  *
- * روش رفع: بعد از لاگین موفق در HTTP (/login)، یک توکن تصادفی یک‌بارمصرف
- * (session token) به مرورگر داده می‌شود. کلاینت باید همین توکن را در
- * اولین پیام WebSocket (نوع "auth") بفرستد. تا وقتی کلاینت auth نشده،
- * هیچ فرمان "command"ای از او پذیرفته نمی‌شود.
+ * WebSocket authentication:
+ * Previously the WebSocket connection had no authentication at all -
+ * anyone who knew the device's IP could connect directly to /ws and
+ * send lock/unlock/trunk commands without ever going through the login
+ * screen.
  *
- * این یک لایه دفاعی سبک مناسب دستگاه embedded است، نه JWT/OAuth کامل؛
- * اما به‌مراتب بهتر از نبود کامل احراز هویت در نسخه قبلی است.
- * 
- * === CarTouch v2.0 - افزوده‌های جدید ===
- * به CarTouch_V2_SPEC.md بخش ۷.۵ مراجعه کنید. پیام‌های WebSocket جدید
- * برای Learn Mode (learn_start, learn_capture_baseline, ...) و
- * endpoint های REST جدید برای مدیریت پروفایل‌های سفارشی اضافه شده‌اند.
- * همه‌ی این‌ها از همان زیرساخت auth/rate-limit موجود عبور می‌کنند -
- * هیچ مسیر موازی بدون احراز هویت اضافه نشده است.
+ * Fix: after a successful HTTP login (/login), the browser receives a
+ * one-time random session token. The client must send that same token
+ * as its first WebSocket message (type "auth"). Until a client is
+ * authenticated, no "command" message from it is accepted.
+ *
+ * This is a lightweight defense layer appropriate for an embedded
+ * device, not full JWT/OAuth - but a significant improvement over no
+ * authentication at all.
+ *
+ * Learn Mode (v2.0): see CarTouch_SPEC.md section 7.5. New WebSocket
+ * message types (learn_start, learn_capture_baseline, ...) and new REST
+ * endpoints for managing custom vehicle profiles were added - all going
+ * through the same auth/rate-limit infrastructure above, with no
+ * unauthenticated parallel path.
  */
 
 #ifndef WEBSERVER_H
@@ -36,33 +37,24 @@
 #include "active_profile_manager.h"
 #include "vehicle_control.h"
 
-// حداکثر تعداد کلاینت‌های WebSocket که وضعیت auth آن‌ها را همزمان ردیابی می‌کنیم
-#define WS_MAX_CLIENTS 8
+#define WS_MAX_CLIENTS          8        // Max WebSocket clients whose auth state is tracked at once
+#define SESSION_TOKEN_TIMEOUT   900000   // Session token validity, ms (15 minutes)
+#define COMMAND_RATE_LIMIT_MS   300      // Minimum spacing between control commands per client, ms
 
-// مهلت اعتبار توکن session (میلی‌ثانیه) - ۱۵ دقیقه
-#define SESSION_TOKEN_TIMEOUT 900000
-
-// حداقل فاصله زمانی مجاز بین دو فرمان کنترلی از یک کلاینت (میلی‌ثانیه)
-#define COMMAND_RATE_LIMIT_MS 300
-
-// تابع callback برای فرمان‌های دریافتی از وب
 typedef void (*WebCommandCallback)(const char* command);
 
-// وضعیت احراز هویت هر کلاینت WebSocket
+// Per-WebSocket-client authentication state
 struct WsClientAuth {
-    uint32_t clientId = 0;
-    bool authenticated = false;
-    uint32_t lastCommandTime = 0;
-    bool inUse = false;
+    uint32_t clientId          = 0;
+    bool     authenticated       = false;
+    uint32_t lastCommandTime       = 0;
+    bool     inUse                   = false;
 };
 
-/**
- * کلاس مدیریت وب سرور
- */
 class WebServerManager {
 public:
     WebServerManager();
-    
+
     void begin(uint16_t port = WEB_PORT);
     void update();
     void setCommandCallback(WebCommandCallback cb);
@@ -70,94 +62,90 @@ public:
     void broadcastStatus(const char* status);
     bool isClientConnected();
     uint8_t getClientCount();
-    
+
     /**
-     * === جدید در v2.0 ===
-     * اتصال ماژول‌های Learn Mode / پروفایل سفارشی. باید قبل از
-     * begin() یک‌بار در setup() صدا زده شود (مشابه setCommandCallback).
-     * این متد جداست تا سازنده‌ی WebServerManager دست‌نخورده بماند و
-     * ترتیب مقداردهی اولیه در main.cpp انعطاف‌پذیر بماند.
+     * Attaches the Learn Mode / custom-profile modules. Must be called
+     * once in setup(), before begin() (same pattern as
+     * setCommandCallback). Kept as a separate method so the
+     * WebServerManager constructor stays untouched and setup() ordering
+     * in main.cpp remains flexible.
      */
-    void attachLearnModules(LearnEngine* learnEngine, 
+    void attachLearnModules(LearnEngine* learnEngine,
                             CustomVehicleStore* customStore,
                             ActiveProfileManager* profileManager,
                             VehicleControl* vehicleControl);
 
     /**
-     * === جدید (چک‌لیست تجاری #20: همگام‌سازی session بین TFT و وب) ===
-     * تمام session های وب فعال (هم HTTP session token و هم auth هر
-     * کلاینت WebSocket) را باطل می‌کند. این متد به‌عنوان
-     * PasswordChangeCallback (نگاه کنید به config.h) با
-     * registerPasswordChangeCallback ثبت می‌شود تا هرگاه رمز از
-     * *هر* رابطی (TFT یا خود وب) عوض شود، صدا زده شود - نه فقط وقتی
-     * از خود وب عوض شده.
+     * Invalidates every active web session - both the HTTP session
+     * token and every connected WebSocket client's auth state.
+     * Registered as a PasswordChangeCallback (see config.h) via
+     * registerPasswordChangeCallback so it fires whenever the password
+     * is changed from *either* interface (TFT or web), not only when
+     * changed from the web itself.
      */
     void invalidateAllSessions();
 
 private:
-    AsyncWebServer _server;
-    AsyncWebSocket _ws;
-    WebCommandCallback _commandCallback;
-    bool _started;
-    
-    // توکن session فعلی (تولید شده بعد از لاگین موفق) و زمان صدور آن
-    String _sessionToken;
-    uint32_t _sessionTokenIssuedAt;
-    
-    // وضعیت auth هر کلاینت WebSocket متصل
+    AsyncWebServer      _server;
+    AsyncWebSocket       _ws;
+    WebCommandCallback     _commandCallback;
+    bool                      _started;
+
+    // Current session token (issued after a successful login) and when it was issued
+    String    _sessionToken;
+    uint32_t  _sessionTokenIssuedAt;
+
+    // Auth state for each connected WebSocket client
     WsClientAuth _clientAuth[WS_MAX_CLIENTS];
-    
-    // === جدید در v2.0: پوینترهای ماژول‌های Learn Mode ===
-    // پوینتر (نه reference) چون ممکن است در ابتدا (قبل از
-    // attachLearnModules) هنوز مقداردهی نشده باشند؛ همه‌ی متدهایی که
-    // از این‌ها استفاده می‌کنند باید null بودن را چک کنند.
-    LearnEngine* _learnEngine;
-    CustomVehicleStore* _customStore;
-    ActiveProfileManager* _profileManager;
-    VehicleControl* _vehicleControl;
-    
-    void _handleWebSocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client, 
+
+    // Learn Mode module pointers - raw pointers (not references) since
+    // they may still be null before attachLearnModules() runs; every
+    // method that uses them must null-check.
+    LearnEngine*             _learnEngine;
+    CustomVehicleStore*        _customStore;
+    ActiveProfileManager*        _profileManager;
+    VehicleControl*                _vehicleControl;
+
+    void _handleWebSocketEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
                                AwsEventType type, void* arg, uint8_t* data, size_t len);
     void _handleAPIControl(AsyncWebServerRequest* request);
     void _handleAPIStatus(AsyncWebServerRequest* request);
     void _handleNotFound(AsyncWebServerRequest* request);
 
-    // === جدید: به‌روزرسانی OTA از طریق وب (/update) - پشت همان احراز هویت ===
+    // -- OTA update via web (/update) - behind the same authentication ------------
     void _handleOtaUpload(AsyncWebServerRequest* request, const String& filename,
                           size_t index, uint8_t* data, size_t len, bool final);
     void _handleOtaFinished(AsyncWebServerRequest* request);
-    String _otaError;          // خطای آخرین آپلود (خالی = بدون خطا)
-    size_t _otaBytes;          // تعداد بایت‌های نوشته‌شده در آپلود جاری
-    bool _otaIsFs;             // true = آپلود ایمیج فایل‌سیستم (spiffs.bin)
-    bool _rebootPending;       // ریست بعد از OTA موفق (در update() انجام می‌شود)
-    uint32_t _rebootAt;
-    
-    // پوینتر استاتیک به تنها نمونه‌ی زنده‌ی WebServerManager - لازم
-    // چون registerPasswordChangeCallback فقط یک function pointer
-    // ساده (بدون capture) می‌پذیرد، مشابه الگوی pThisUI در tft_ui.cpp
-    static WebServerManager* _instance;
-    static void _staticInvalidateSessions();  // پل بدون capture به invalidateAllSessions()
+    String    _otaError;          // Most recent upload error (empty = none)
+    size_t     _otaBytes;          // Bytes written so far in the current upload
+    bool        _otaIsFs;           // true = filesystem image upload (spiffs.bin)
+    bool         _rebootPending;      // Reboot after a successful OTA (handled in update())
+    uint32_t      _rebootAt;
 
-    bool _authenticate(AsyncWebServerRequest* request);
-    String _generateSessionToken();
-    bool _isValidSessionToken(const char* token);
-    
+    // Static instance pointer - registerPasswordChangeCallback only
+    // accepts a plain, non-capturing function pointer, so this mirrors
+    // the pThisUI pattern in tft_ui.cpp.
+    static WebServerManager* _instance;
+    static void _staticInvalidateSessions();  // Non-capturing bridge to invalidateAllSessions()
+
+    bool    _authenticate(AsyncWebServerRequest* request);
+    String   _generateSessionToken();
+    bool      _isValidSessionToken(const char* token);
+
     WsClientAuth* _findOrCreateClientAuth(uint32_t clientId);
     WsClientAuth* _findClientAuth(uint32_t clientId);
-    void _removeClientAuth(uint32_t clientId);
-    
+    void           _removeClientAuth(uint32_t clientId);
+
     String _vehicleDataToJSON(const VehicleData& data);
-    
-    // === جدید در v2.0: پردازش پیام‌های WebSocket مربوط به Learn Mode ===
-    // این تابع فقط بعد از احراز هویت کامل کلاینت (auth->authenticated==true)
-    // صدا زده می‌شود - دقیقاً مثل پیام‌های "command" موجود.
+
+    // Learn Mode WebSocket message handling - only called after a client
+    // is fully authenticated (auth->authenticated==true), same as
+    // existing "command" messages.
     void _handleLearnModeMessage(AsyncWebSocketClient* client, JsonDocument& doc, const char* type);
-    
-    // ساخت JSON برای وضعیت فعلی learn engine (برای ارسال به کلاینت)
-    String _learnStateToJSON();
-    
-    // === جدید در v2.0: REST endpoint های مدیریت پروفایل سفارشی ===
-    void _registerCustomVehicleRoutes();
+
+    String _learnStateToJSON();  // Serializes the learn engine's current state for the client
+
+    void _registerCustomVehicleRoutes();  // Custom-profile management REST endpoints
 };
 
 #endif // WEBSERVER_H
