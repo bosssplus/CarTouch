@@ -17,6 +17,7 @@
 #include "active_profile_manager.h"
 #include "vehicle_control.h"
 #include <TFT_eSPI.h>
+#include <esp_task_wdt.h>
 
 // ============================================================================
 // Static state
@@ -257,10 +258,26 @@ void TFT_UI::runTouchCalibration() {
     tft.println("چهار گوشه صفحه که چشمک می‌زنند را لمس کنید");
 
     uint16_t calData[5];
+
+    // calibrateTouch() below blocks on this task (loopTask) for up to
+    // 15s per point while it waits for a touch - and never feeds the
+    // task watchdog while it waits. If the touch panel isn't wired up
+    // yet (or the driver is just slow to tap), the 8s watchdog fires
+    // mid-calibration, the board panics and reboots, and - since
+    // touchCalibrated is still false - it lands right back in this
+    // same wizard, giving an endless reboot loop. Unsubscribe this
+    // task from the watchdog for the duration of the blocking call so
+    // a stuck/unwired touch panel just times out normally instead of
+    // crashing the board, then resubscribe immediately afterward.
+    esp_task_wdt_delete(NULL);
+
     // Params: crosshair color, background color, timeout in ms (15s per
     // point - generous for a driver seated in a car whose hands may be
     // occupied).
     tft.calibrateTouch(calData, TFT_MAGENTA, TFT_BLACK, 15000);
+
+    esp_task_wdt_add(NULL);
+    esp_task_wdt_reset();
 
     AppConfig* cfg = getConfig();
     memcpy(cfg->touchCalData, calData, sizeof(calData));
