@@ -66,12 +66,18 @@ public:
      * Runs the interactive touch calibration flow (5 points, via
      * TFT_eSPI's calibrateTouch()). The result is stored in AppConfig
      * (touchCalData/touchCalibrated) so it isn't needed again on
-     * subsequent boots. This call is blocking - it waits for the user
-     * to touch 5 points - and must only be invoked from setup() or from
-     * a settings menu the user explicitly triggered, never
+     * subsequent boots. This call blocks the caller - though not the
+     * whole board, see tft_ui.cpp - for up to ~20s while it waits for
+     * the user to touch 5 points, and must only be invoked from setup()
+     * or from a settings menu the user explicitly triggered, never
      * automatically mid-operation from the main loop.
+     *
+     * Returns true if calibration completed and was saved, false if the
+     * touch panel never responded (e.g. not wired up yet) and the
+     * attempt timed out - in which case touchCalibrated is left false
+     * and the caller should treat touch as unavailable for now.
      */
-    void runTouchCalibration();
+    bool runTouchCalibration();
 
 private:
     bool               _initialized;
