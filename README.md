@@ -295,7 +295,7 @@ flowchart LR
 <td align="center">Touch Chip Select</td>
 </tr>
 <tr>
-<td align="center">T<i>DIN / T</i>DOUT / T_CLK</td>
+<td align="center">T_DIN / T_DOUT / T_CLK</td>
 <td align="center">GPIO11 / GPIO13 / GPIO12</td>
 <td align="center">اشتراکی با SPI نمایشگر (فقط CS تاچ جداست)</td>
 </tr>
