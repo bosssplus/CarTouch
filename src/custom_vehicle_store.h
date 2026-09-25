@@ -1,20 +1,19 @@
 /**
- * custom_vehicle_store.h - ذخیره‌سازی پایدار پروفایل‌های خودروی سفارشی
- * 
- * بخشی از CarTouch v2.0 (به CarTouch_V2_SPEC.md بخش ۶ مراجعه کنید).
- * 
- * پروفایل‌های سفارشی (Learned/Manual) بر خلاف AppConfig که یک ساختار
- * ثابت در NVS است، در فایل‌های JSON جداگانه در SPIFFS ذخیره می‌شوند
- * چون تعدادشان و اندازه‌ی فرمان‌هایشان متغیر است:
- * 
- *   /custom_vehicles/index.json          - لیست خلاصه (برای نمایش سریع)
- *   /custom_vehicles/profile_0.json      - جزئیات کامل پروفایل ۰
- *   /custom_vehicles/profile_1.json      - جزئیات کامل پروفایل ۱
+ * custom_vehicle_store.h - Persistent storage for custom vehicle profiles
+ *
+ * Part of CarTouch v2.0 (see CarTouch_SPEC.md section 6).
+ *
+ * Unlike AppConfig, which is a fixed struct in NVS, custom (Learned/
+ * Manual) profiles are stored as separate JSON files in SPIFFS, since
+ * their count and command sizes vary:
+ *
+ *   /custom_vehicles/index.json      - summary list (for quick display)
+ *   /custom_vehicles/profile_0.json  - full details of profile 0
+ *   /custom_vehicles/profile_1.json  - full details of profile 1
  *   ...
- * 
- * تمام عملیات این فایل از ArduinoJson استفاده می‌کند که پروژه از قبل
- * به‌عنوان dependency دارد (bblanchon/ArduinoJson در platformio.ini) -
- * کتابخانه‌ی جدیدی اضافه نشده است.
+ *
+ * Uses ArduinoJson, already a project dependency
+ * (bblanchon/ArduinoJson in platformio.ini) - no new library added.
  */
 
 #ifndef CUSTOM_VEHICLE_STORE_H
@@ -27,102 +26,83 @@
 class CustomVehicleStore {
 public:
     CustomVehicleStore();
-    
+
     /**
-     * مقداردهی اولیه - پوشه /custom_vehicles را در صورت نبود می‌سازد
-     * و ایندکس را از SPIFFS می‌خواند. باید بعد از SPIFFS.begin() و
-     * قبل از استفاده از سایر متدها صدا زده شود.
+     * Creates /custom_vehicles if missing and loads the index from
+     * SPIFFS. Must be called after SPIFFS.begin() and before any other
+     * method.
      */
     bool begin();
-    
-    /**
-     * تعداد پروفایل‌های سفارشی موجود (اسلات‌های inUse=true)
-     */
+
+    /** Number of custom profiles currently in use (inUse=true slots). */
     uint8_t getProfileCount();
-    
+
     /**
-     * خواندن خلاصه یک پروفایل با ایندکس (بدون فرمان‌های کامل - سریع)
-     * برای نمایش لیست استفاده می‌شود.
-     * @return true اگر اسلات پر باشد
+     * Reads a profile's summary by index (no full commands - fast).
+     * Used for list display.
+     * @return true if the slot is occupied
      */
     bool getProfileSummary(uint8_t index, CustomVehicleProfile& outSummary);
-    
-    /**
-     * خواندن کامل یک پروفایل (شامل تمام فرمان‌ها) از فایل profile_N.json
-     * @return true در صورت موفقیت
-     */
+
+    /** Reads a full profile (including all commands) from profile_N.json. */
     bool loadProfile(uint8_t index, CustomVehicleProfile& outProfile);
-    
-    /**
-     * ذخیره کامل یک پروفایل (ایجاد یا بازنویسی). ایندکس هم به‌روزرسانی
-     * می‌شود.
-     * @return true در صورت موفقیت
-     */
+
+    /** Saves a full profile (create or overwrite); also updates the index. */
     bool saveProfile(const CustomVehicleProfile& profile);
-    
+
     /**
-     * ساخت یک پروفایل جدید خالی و رزرو یک اسلات آزاد.
-     * @param name نام دلخواه کاربر
-     * @param outIndex [out] ایندکس اسلات رزروشده
-     * @return true اگر جا بود
+     * Creates a new empty profile and reserves a free slot.
+     * @param name     user-chosen name
+     * @param outIndex [out] the reserved slot index
+     * @return true if a free slot was available
      */
-    bool createNewProfile(const char* name, const char* brand, 
+    bool createNewProfile(const char* name, const char* brand,
                           const char* model, uint16_t year, uint8_t& outIndex);
-    
-    /**
-     * حذف کامل یک پروفایل (فایل + ایندکس)
-     */
+
+    /** Deletes a profile entirely (file + index entry). */
     bool deleteProfile(uint8_t index);
-    
+
     /**
-     * افزودن یا به‌روزرسانی یک فرمان در یک پروفایل موجود
-     * (اگر label از قبل بود، بازنویسی می‌شود - برای یادگیری مجدد)
-     * @return true در صورت موفقیت (جا کافی بود)
+     * Adds or updates a command within an existing profile (if the
+     * label already exists, it's overwritten - used for relearning).
+     * @return true on success (there was room)
      */
     bool upsertCommand(uint8_t profileIndex, const LearnedCommand& cmd);
-    
-    /**
-     * تغییر وضعیت یک فرمان (برای تأیید/رد بعد از verify_confirm)
-     */
-    bool setCommandStatus(uint8_t profileIndex, const char* label, 
+
+    /** Changes a command's status (used after verify_confirm). */
+    bool setCommandStatus(uint8_t profileIndex, const char* label,
                           CommandStatus newStatus, bool incrementFailCount = false);
-    
-    /**
-     * پیدا کردن یک فرمان مشخص در یک پروفایل بر اساس label
-     * @return true اگر پیدا شد
-     */
+
+    /** Finds a specific command within a profile by label. */
     bool findCommand(uint8_t profileIndex, const char* label, LearnedCommand& outCmd);
-    
-    /**
-     * صدور پروفایل به‌صورت رشته‌ی JSON خام (برای دانلود/export)
-     */
+
+    /** Exports a profile as a raw JSON string (for download/export). */
     bool exportProfileJSON(uint8_t index, String& outJson);
-    
+
     /**
-     * وارد کردن یک پروفایل از رشته‌ی JSON (برای آپلود/import).
-     * طبق سیاست امنیتی بخش ۶.۳: تمام فرمان‌های وارد‌شده صرف‌نظر از
-     * status موجود در فایل ورودی، به CMD_UNVERIFIED تنزل داده
-     * می‌شوند - چون این دستگاه با این فرمان‌ها روی این خودروی خاص
-     * تست نشده است.
-     * @param outIndex [out] ایندکس اسلات جدید
-     * @return true در صورت موفقیت (JSON معتبر بود و جا وجود داشت)
+     * Imports a profile from a JSON string (for upload/import). Per the
+     * security policy in SPEC section 6.3: every imported command is
+     * downgraded to CMD_UNVERIFIED regardless of the status in the
+     * source file, since this device has not tested these commands on
+     * this specific vehicle.
+     * @param outIndex [out] the new slot index
+     * @return true on success (valid JSON and a free slot existed)
      */
     bool importProfileJSON(const String& json, uint8_t& outIndex);
 
 private:
     bool _initialized;
-    
-    // نگاشت ساده در RAM فقط برای خلاصه‌ها (نه فرمان‌های کامل) تا
-    // لیست‌کردن سریع باشد بدون خواندن هر بار از فلش
+
+    // In-RAM cache of summaries only (not full commands) so listing is
+    // fast without re-reading flash every time.
     CustomVehicleProfile _summaryCache[MAX_CUSTOM_VEHICLES];
-    
+
     String _profilePath(uint8_t index);
-    bool _loadIndex();
-    bool _saveIndex();
-    bool _writeProfileFile(const CustomVehicleProfile& profile);
-    bool _readProfileFile(uint8_t index, CustomVehicleProfile& outProfile);
-    
-    // تبدیل بین struct و JSON (استفاده داخلی)
+    bool    _loadIndex();
+    bool     _saveIndex();
+    bool      _writeProfileFile(const CustomVehicleProfile& profile);
+    bool       _readProfileFile(uint8_t index, CustomVehicleProfile& outProfile);
+
     void _profileToJson(const CustomVehicleProfile& profile, JsonDocument& doc);
     bool _jsonToProfile(JsonDocument& doc, CustomVehicleProfile& profile);
 };

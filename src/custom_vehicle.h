@@ -1,20 +1,22 @@
 /**
- * custom_vehicle.h - ساختارهای داده برای پروفایل‌های خودروی سفارشی
- * 
- * این فایل بخشی از CarTouch v2.0 است (به CarTouch_V2_SPEC.md مراجعه کنید).
- * 
- * دو منبع فرمان جدید (علاوه بر DBC موجود در vehicle_db.h) را تعریف می‌کند:
- *   1. Learned  - فرمانی که از دیدن CAN Bus واقعی هنگام فشردن دکمه
- *                 فیزیکی خودرو به‌دست آمده (به learn_engine.h مراجعه کنید)
- *   2. Manual   - فرمانی که کاربر مستقیماً CAN ID و بایت‌ها را وارد کرده
- * 
- * هر دو در یک ساختار مشترک LearnedCommand ذخیره می‌شوند چون از نظر
- * دستگاه یکسان‌اند: یک CAN ID + بایت‌های ثابت که باید تا زمان تأیید
- * صریح کاربر (status == VERIFIED) قابل اجرا نباشند.
- * 
- * ⚠️ نکته ایمنی مهم: وجود یک LearnedCommand در این ساختار به‌معنای
- * "مجاز به اجرا" نیست. فقط زمانی executeCommand() در vehicle_control
- * اجازه‌ی ارسال واقعی می‌دهد که status == CMD_VERIFIED باشد.
+ * custom_vehicle.h - Data structures for custom vehicle profiles
+ *
+ * Part of CarTouch v2.0 (see CarTouch_SPEC.md).
+ *
+ * Defines two new command sources, alongside the built-in DBC files
+ * (vehicle_db.h):
+ *   1. Learned - a command captured from live CAN Bus traffic while the
+ *                vehicle's physical button was pressed (see learn_engine.h)
+ *   2. Manual  - a command the user entered directly (CAN ID + bytes)
+ *
+ * Both are stored in the same LearnedCommand struct, since from the
+ * device's point of view they're identical: a fixed CAN ID + payload
+ * that must not be executable until the user has explicitly verified it
+ * (status == VERIFIED).
+ *
+ * Safety note: the mere presence of a LearnedCommand in this struct
+ * does NOT mean it's cleared to send. VehicleControl::executeCommand()
+ * only allows an actual send when status == CMD_VERIFIED.
  */
 
 #ifndef CUSTOM_VEHICLE_H
@@ -23,35 +25,40 @@
 #include <Arduino.h>
 #include "config.h"
 
-// ======================== محدودیت‌های حافظه ========================
-// طبق بخش ۴.۳ سند مشخصات - محاسبه شده تا از باگ قبلی نوع
-// MAX_DBC_SIGNALS=200 (که ۱.۲ مگابایت RAM می‌شد) تکرار نشود.
-// هر LearnedCommand ~۵۰ بایت -> ۳۲ فرمان * ۸ خودرو ~= ۱۲.۸ کیلوبایت کل.
+// ============================================================================
+// Sizing
+// ============================================================================
+// Per SPEC section 4.3 - deliberately conservative to avoid repeating
+// the earlier MAX_DBC_SIGNALS=200 bug (which cost ~1.2 MB of RAM).
+// Each LearnedCommand is ~50 bytes -> 32 commands * 8 vehicles ~= 12.8 KB total.
 
 #define MAX_CUSTOM_VEHICLES               8
 #define MAX_LEARNED_COMMANDS_PER_VEHICLE  32
 
-// ======================== وضعیت تأیید فرمان ========================
+// ============================================================================
+// Command verification status
+// ============================================================================
 
 enum CommandStatus : uint8_t {
-    CMD_UNVERIFIED = 0,  // ذخیره شده ولی هنوز کاربر تأیید نکرده - قابل اجرا نیست
-    CMD_VERIFIED   = 1   // کاربر صریحاً تأیید کرده که روی خودرو کار می‌کند
+    CMD_UNVERIFIED = 0,  // Saved but not yet user-confirmed - not executable
+    CMD_VERIFIED   = 1   // User explicitly confirmed this works on the vehicle
 };
 
-// ======================== منبع فرمان ========================
+// ============================================================================
+// Command source
+// ============================================================================
 
 enum CommandSource : uint8_t {
-    SOURCE_DBC     = 0,  // از فایل DBC (vehicle_db) - سیگنال نوشتن (در عمل نادر)
-    SOURCE_LEARNED = 1,  // از حالت یادگیری (learn_engine) با دکمه فیزیکی واقعی
-    SOURCE_MANUAL  = 2   // وارد شده دستی توسط کاربر
+    SOURCE_DBC     = 0,  // From a DBC file (vehicle_db) - a write signal (rare in practice)
+    SOURCE_LEARNED = 1,  // Captured via Learn Mode from a real physical button press
+    SOURCE_MANUAL  = 2   // Entered manually by the user
 };
 
-// برچسب‌های استاندارد پیشنهادی برای فرمان‌ها (بخش ۴.۱ سند).
-// این‌ها فقط رشته‌های پیشنهادی‌اند؛ کاربر می‌تواند برچسب دلخواه
-// (custom) هم وارد کند، بنابراین به‌صورت enum سخت‌گیرانه نیستند،
-// بلکه به‌عنوان ثابت‌های رشته‌ای در custom_vehicle_store.cpp تعریف
-// می‌شوند تا هم UI (TFT/وب) و هم executeCommand() از همان رشته‌ها
-// استفاده کنند.
+// Standard suggested command labels (SPEC section 4.1). These are just
+// suggested strings - the user can also enter a free-form custom label,
+// so they're defined as plain string constants (not a strict enum) here
+// and reused by both the UI (TFT/web) and executeCommand() so all three
+// stay in sync.
 #define CMD_LABEL_LOCK_ALL         "lock_all"
 #define CMD_LABEL_UNLOCK_ALL       "unlock_all"
 #define CMD_LABEL_UNLOCK_DRIVER    "unlock_driver"
@@ -74,41 +81,45 @@ enum CommandSource : uint8_t {
 #define CMD_LABEL_MIRROR_UNFOLD    "mirror_unfold"
 #define CMD_LABEL_ALARM_ARM        "alarm_arm"
 #define CMD_LABEL_ALARM_DISARM     "alarm_disarm"
-// برای برچسب دلخواه (custom)، کاربر یک رشته‌ی آزاد وارد می‌کند که
-// مستقیماً به‌عنوان label ذخیره می‌شود (بدون پیشوند خاص).
+// For a custom label, the user enters a free-form string that is stored
+// directly as the label (no special prefix required).
 
-// ======================== ساختار یک فرمان یادگرفته‌شده/دستی ========================
+// ============================================================================
+// A single learned/manual command
+// ============================================================================
 
 struct LearnedCommand {
-    char label[32] = {0};          // شناسه‌ی داخلی (مثلاً "lock_all" یا نام دلخواه)
-    char displayName[48] = {0};    // نام نمایشی فارسی (مثلاً "قفل همه درب‌ها")
-    
-    uint32_t canId = 0;
-    bool isExtended = false;
-    uint8_t length = 0;
-    uint8_t data[8] = {0};
-    
+    char label[32]        = {0};   // Internal identifier (e.g. "lock_all" or a custom name)
+    char displayName[48]   = {0};   // Persian display name shown to the driver (e.g. "قفل همه درب‌ها")
+
+    uint32_t canId       = 0;
+    bool      isExtended    = false;
+    uint8_t    length          = 0;
+    uint8_t     data[8]           = {0};
+
     CommandSource source = SOURCE_MANUAL;
-    CommandStatus status = CMD_UNVERIFIED;
-    
-    uint8_t timesObserved = 0;     // چند بار در capture دیده شد (فقط برای Learned)
-    uint8_t failCount = 0;         // چند بار تأیید ناموفق بود
-    uint32_t createdAt = 0;        // millis() زمان ایجاد (برای نمایش/دیباگ - بعد از ریبوت بی‌معنی می‌شود، فقط مرجع داخلی جلسه)
+    CommandStatus status    = CMD_UNVERIFIED;
+
+    uint8_t  timesObserved = 0;   // Times seen during capture (Learned only)
+    uint8_t  failCount        = 0;   // Failed verification attempts
+    uint32_t createdAt           = 0;   // Creation time (millis) - for display/debug only; meaningless after reboot, session-local reference
 };
 
-// ======================== ساختار یک پروفایل خودروی سفارشی ========================
+// ============================================================================
+// A custom vehicle profile
+// ============================================================================
 
 struct CustomVehicleProfile {
-    uint8_t id = 0;                 // شاخص در فایل ایندکس (0..MAX_CUSTOM_VEHICLES-1)
-    char name[32] = {0};            // نام دلخواه کاربر: "پراید بابا"
-    char brand[24] = {0};
-    char model[24] = {0};
-    uint16_t year = 0;
-    
+    uint8_t  id                  = 0;    // Index in the profile store (0..MAX_CUSTOM_VEHICLES-1)
+    char      name[32]               = {0};  // User-chosen name, e.g. "Dad's Pride"
+    char       brand[24]                 = {0};
+    char        model[24]                    = {0};
+    uint16_t     year                            = 0;
+
     LearnedCommand commands[MAX_LEARNED_COMMANDS_PER_VEHICLE];
-    uint8_t commandCount = 0;
-    
-    bool inUse = false;             // اگر false یعنی این اسلات خالی است
+    uint8_t          commandCount = 0;
+
+    bool inUse = false;   // false = this slot is empty
 };
 
 #endif // CUSTOM_VEHICLE_H

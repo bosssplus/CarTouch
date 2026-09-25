@@ -1,111 +1,123 @@
 /**
- * active_profile_manager.cpp - پیاده‌سازی لایه‌ی یکپارچه‌ساز منابع فرمان
+ * active_profile_manager.cpp - Command-source unification layer implementation
  */
 
 #include "active_profile_manager.h"
 #include "custom_vehicle.h"
 
-// ======================== سازنده ========================
+// ============================================================================
+// Constructor
+// ============================================================================
 
 ActiveProfileManager::ActiveProfileManager(VehicleDB& vehicleDB, CustomVehicleStore& customStore)
     : _vehicleDB(vehicleDB), _customStore(customStore) {
-    _activeKind = ACTIVE_KIND_NONE;
-    _activeCustomIndex = 0;
+    _activeKind           = ACTIVE_KIND_NONE;
+    _activeCustomIndex       = 0;
 }
 
-// ======================== انتخاب خودروی DBC ========================
+// ============================================================================
+// Select a DBC vehicle
+// ============================================================================
 
 void ActiveProfileManager::selectDBCVehicle(const char* brand, const char* model) {
     _vehicleDB.setActiveVehicle(brand, model);
     _activeKind = ACTIVE_KIND_DBC;
-    Serial.printf("[APM] خودروی فعال (DBC): %s %s\n", brand, model);
+    Serial.printf("[APM] Active vehicle (DBC): %s %s\n", brand, model);
 }
 
-// ======================== انتخاب خودروی سفارشی ========================
+// ============================================================================
+// Select a custom vehicle
+// ============================================================================
 
 bool ActiveProfileManager::selectCustomVehicle(uint8_t profileIndex) {
     CustomVehicleProfile summary;
     if (!_customStore.getProfileSummary(profileIndex, summary)) {
-        Serial.printf("⚠️ [APM] پروفایل سفارشی %d یافت نشد\n", profileIndex);
+        Serial.printf("[APM] Custom profile %d not found\n", profileIndex);
         return false;
     }
-    
+
     _activeCustomIndex = profileIndex;
-    _activeKind = ACTIVE_KIND_CUSTOM;
-    Serial.printf("[APM] خودروی فعال (سفارشی): %s\n", summary.name);
+    _activeKind            = ACTIVE_KIND_CUSTOM;
+    Serial.printf("[APM] Active vehicle (custom): %s\n", summary.name);
     return true;
 }
 
-// ======================== نوع فعال ========================
+// ============================================================================
+// Accessors
+// ============================================================================
 
 ActiveVehicleKind ActiveProfileManager::getActiveKind() {
     return _activeKind;
 }
 
-// ======================== ایندکس سفارشی فعال ========================
-
 uint8_t ActiveProfileManager::getActiveCustomIndex() {
     return _activeCustomIndex;
 }
 
-// ======================== حل کردن فرمان ========================
+// ============================================================================
+// Command resolution
+// ============================================================================
 
 bool ActiveProfileManager::resolveCommand(const char* label, CanMessage& outMsg, String& outErrorReason) {
     if (_activeKind == ACTIVE_KIND_NONE) {
         outErrorReason = "هیچ خودرویی انتخاب نشده است";
         return false;
     }
-    
+
     if (_activeKind == ACTIVE_KIND_DBC) {
-        // === مسیر DBC ===
-        // توجه مهم (طبق بخش ۷.۲ سند): اکثر فایل‌های DBC موجود در این
-        // پروژه (از OpenDBC) عمدتاً سیگنال‌های خواندن دارند، نه
-        // فرمان‌های نوشتن برای قفل/شیشه. در پیاده‌سازی فعلی، جستجوی
-        // فرمان‌های نوشتن در DBC هنوز به یک قرارداد نام‌گذاری خاص
-        // متکی نیست (چون در عمل به‌ندرت این داده در فایل‌های DBC
-        // موجود پیدا می‌شود). به همین دلیل مسیر DBC فعلاً یک پیام
-        // خطای صادقانه برمی‌گرداند تا کاربر به‌جای شکست خاموش، دقیقاً
-        // بداند چرا و به سمت Learn Mode / ورود دستی هدایت شود.
+        // -- DBC path ---------------------------------------------------------
+        // Important note (per SPEC section 7.2): most DBC files bundled
+        // with this project (from OpenDBC) mainly contain read signals,
+        // not write commands for locks/windows. The current
+        // implementation doesn't rely on any specific naming convention
+        // for finding write commands in a DBC (since such data is rarely
+        // actually present in the bundled files in practice). So the DBC
+        // path currently returns an honest error message, so the user
+        // knows exactly why instead of a silent failure, and is guided
+        // toward Learn Mode / manual entry.
         //
-        // اگر در آینده یک قرارداد نام‌گذاری سیگنال (مثلاً سیگنالی با
-        // نام دقیقاً برابر با label، مثل "lock_all") در یک DBC خاص
-        // پیدا و تأیید شد، این‌جا باید vehicleDB.findMessageByID /
-        // findSignal برای آن سیگنال خاص فراخوانی و encodeSignalValue
-        // استفاده شود. این کار عمداً در این نسخه پیاده‌سازی نشده چون
-        // حدس زدن چنین قراردادی بدون داده‌ی واقعی خطرناک‌تر از
-        // صادق بودن درباره‌ی نبودش است.
+        // If a signal-naming convention (e.g. a signal named exactly
+        // like the label, such as "lock_all") is ever identified and
+        // confirmed in a specific DBC, this is where
+        // vehicleDB.findMessageByID / findSignal for that signal and
+        // encodeSignalValue should be used. This is deliberately not
+        // implemented in this version - guessing at such a convention
+        // without real data would be riskier than being honest about
+        // its absence.
         outErrorReason = "این فایل DBC فرمان نوشتن برای این عملکرد ندارد - "
                          "از «حالت یادگیری» یا «ورود دستی» استفاده کنید";
         return false;
     }
-    
-    // === مسیر سفارشی (Learned / Manual) ===
+
+    // -- Custom path (Learned / Manual) ----------------------------------------
     LearnedCommand cmd;
     if (!_customStore.findCommand(_activeCustomIndex, label, cmd)) {
         outErrorReason = "فرمانی با این برچسب برای این خودرو یادگرفته/ثبت نشده است";
         return false;
     }
-    
-    // ⚠️ چک حیاتی ایمنی - دفاع لایه‌ای. vehicle_control.cpp هم این
-    // چک را دارد، ولی این‌جا هم تکرار می‌شود تا این کلاس به‌تنهایی
-    // (مثلاً اگر در آینده جای دیگری هم صدا زده شد) هرگز یک فرمان
-    // تأییدنشده را به‌عنوان قابل‌ارسال برنگرداند.
+
+    // Critical safety check - defense in depth. vehicle_control.cpp also
+    // has this check, but it's repeated here too, so this class alone
+    // (e.g. if called from somewhere else in the future) never returns
+    // an unverified command as sendable.
     if (cmd.status != CMD_VERIFIED) {
         outErrorReason = "این فرمان هنوز تأیید نشده (UNVERIFIED) - "
                          "ابتدا از منوی «فرمان‌های من» تأیید کنید";
         return false;
     }
-    
-    outMsg.id = cmd.canId;
-    outMsg.isExtended = cmd.isExtended;
-    outMsg.isRemote = false;
-    outMsg.length = cmd.length;
+
+    outMsg.id          = cmd.canId;
+    outMsg.isExtended    = cmd.isExtended;
+    outMsg.isRemote        = false;
+    outMsg.length             = cmd.length;
     memcpy(outMsg.data, cmd.data, cmd.length);
-    
+
     return true;
 }
 
-// ======================== نام خودروی فعال ========================
+// ============================================================================
+// Active vehicle name
+// ============================================================================
 
 void ActiveProfileManager::getActiveVehicleName(char* outBuf, size_t maxLen) {
     if (_activeKind == ACTIVE_KIND_DBC) {

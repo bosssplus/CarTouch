@@ -1,45 +1,45 @@
 /**
- * learn_engine.h - موتور یادگیری فرمان از روی CAN Bus واقعی
- * 
- * بخشی از CarTouch v2.0 (به CarTouch_V2_SPEC.md بخش ۴ مراجعه کنید).
- * 
- * ⚠️⚠️⚠️ قانون ایمنی سخت‌گیرانه و غیرقابل‌مذاکره ⚠️⚠️⚠️
- * این کلاس هرگز، تحت هیچ شرایطی، نباید متد sendMessage روی
- * CANManager صدا بزند. تمام کاری که این کلاس می‌کند خواندن/شنود
- * (receiveMessageNonBlocking) است. اگر در آینده کسی این فایل را
- * تغییر می‌دهد، این قانون باید حفظ شود - نقض آن یعنی ارسال فرمان
- * ناشناخته/آزمایشی به باس زنده‌ی یک خودروی واقعی که می‌تواند به
- * سیستم‌های ایمنی (ترمز، ایربگ، فرمان) آسیب برساند.
- * 
- * ⚠️ محدودیت شناخته‌شده (صادقانه مستند شده، نه پنهان‌شده):
- * طبق بخش ۳.۳ سند، ایده‌آل این بود که هنگام ورود به هر یک از
- * حالت‌های LEARN_BASELINE_CAPTURE/LEARN_ACTION_CAPTURE، درایور TWAI
- * واقعاً با پرچم TWAI_MODE_LISTEN_ONLY نصب مجدد شود (نه فقط تکیه بر
- * اینکه این کلاس sendMessage صدا نمی‌زند) تا حتی در برابر یک باگ
- * نرم‌افزاری احتمالی در آینده هم تضمین سخت‌افزاری وجود داشته باشد.
- * این کار در نسخه‌ی فعلی پیاده‌سازی نشده چون CANManager::begin/end
- * synchronous و نسبتاً کند است (چند صد میلی‌ثانیه) و انجام آن در
- * وسط یک بازه‌ی ۲ ثانیه‌ای زمان‌حساس (مثلاً بلافاصله بعد از
- * confirmReadyForAction) می‌تواند خودش باعث از دست رفتن دقیقاً همان
- * پیام‌هایی شود که قرار است ضبط شوند. راه‌حل درست، افزودن یک مسیر
- * "reconfigure سریع بدون uninstall/install کامل" به CANManager است -
- * این یک آیتم مشخص برای توسعه‌ی بعدی است (بخش ۱۲ سند)، نه چیزی که
- * در این نسخه حدس زده و ناقص پیاده‌سازی شود. تا آن زمان، ایمنی این
- * بخش صرفاً بر تضمین سطح کد (این فایل هرگز sendMessage ندارد) متکی
- * است، که خودش با بازبینی این فایل (که کوتاه و متمرکز نگه داشته شده)
- * قابل تأیید است.
- * 
- * الگوریتم (خلاصه، جزئیات کامل در بخش ۴.۱ سند):
- *   1. IDLE -> شروع با انتخاب برچسب فرمان توسط کاربر
- *   2. BASELINE_CAPTURE: چند ثانیه پیام‌های زمینه (قبل از فشردن دکمه)
- *      در یک جدول <canId, lastData, count> ذخیره می‌شود
- *   3. WAITING_ACTION: به کاربر گفته می‌شود دکمه فیزیکی را بزند
- *   4. ACTION_CAPTURE: چند ثانیه پیام‌های جدید گرفته و با baseline
- *      مقایسه (diff) می‌شوند
- *   5. CANDIDATES_READY: نتایج (حداکثر CANDIDATE_MAX مورد) آماده‌ی
- *      نمایش و انتخاب دستی توسط کاربرند
- *   6. کاربر یکی را انتخاب و ذخیره می‌کند (خارج از این کلاس، در
- *      CustomVehicleStore - این کلاس فقط کاندید تولید می‌کند)
+ * learn_engine.h - Command-learning engine, driven from live CAN Bus traffic
+ *
+ * Part of CarTouch v2.0 (see CarTouch_SPEC.md section 4).
+ *
+ * !!! STRICT, NON-NEGOTIABLE SAFETY RULE !!!
+ * This class must NEVER, under any circumstances, call sendMessage on
+ * CANManager. Everything this class does is read/listen
+ * (receiveMessageNonBlocking) only. If this file is modified in the
+ * future, this rule must be preserved - violating it means sending an
+ * unknown/untested command onto a real vehicle's live bus, which can
+ * affect safety-critical systems (brakes, airbags, steering).
+ *
+ * Known limitation (documented honestly, not hidden):
+ * Per SPEC section 3.3, the ideal design would have the TWAI driver
+ * actually reinstalled with TWAI_MODE_LISTEN_ONLY when entering
+ * LEARN_BASELINE_CAPTURE/LEARN_ACTION_CAPTURE (rather than relying
+ * solely on this class never calling sendMessage), so a hardware-level
+ * guarantee exists even against a hypothetical future software bug.
+ * This isn't implemented in the current version because
+ * CANManager::begin/end is synchronous and relatively slow (a few
+ * hundred milliseconds), and doing it in the middle of a time-sensitive
+ * 2-second window (e.g. right after confirmReadyForAction) could itself
+ * cause exactly the messages meant to be captured to be missed. The
+ * correct fix is a "fast reconfigure without a full uninstall/install"
+ * path in CANManager - a specific item for future work (SPEC section
+ * 12), not something to guess at and half-implement here. Until then,
+ * safety in this area rests entirely on the code-level guarantee (this
+ * file never calls sendMessage), which is verifiable by review since
+ * the file is kept short and focused.
+ *
+ * Algorithm (summary; full detail in SPEC section 4.1):
+ *   1. IDLE -> starts when the user picks a command label
+ *   2. BASELINE_CAPTURE: a few seconds of background traffic (before
+ *      the button is pressed) recorded into a <canId, lastData, count> table
+ *   3. WAITING_ACTION: the user is told to press the physical button
+ *   4. ACTION_CAPTURE: a few seconds of new traffic captured and
+ *      diffed against the baseline
+ *   5. CANDIDATES_READY: results (up to CANDIDATE_MAX) are ready for
+ *      the user to review and pick manually
+ *   6. The user picks one and it's saved (outside this class, in
+ *      CustomVehicleStore - this class only produces candidates)
  */
 
 #ifndef LEARN_ENGINE_H
@@ -49,131 +49,123 @@
 #include "config.h"
 #include "can_manager.h"
 
-// ======================== حالت‌های state machine ========================
+// ============================================================================
+// State machine states
+// ============================================================================
 
 enum LearnModeState : uint8_t {
-    LEARN_IDLE = 0,
-    LEARN_BASELINE_CAPTURE = 1,
-    LEARN_WAITING_ACTION = 2,
-    LEARN_ACTION_CAPTURE = 3,
-    LEARN_CANDIDATES_READY = 4,
-    LEARN_ERROR = 5
+    LEARN_IDLE              = 0,
+    LEARN_BASELINE_CAPTURE  = 1,
+    LEARN_WAITING_ACTION    = 2,
+    LEARN_ACTION_CAPTURE    = 3,
+    LEARN_CANDIDATES_READY  = 4,
+    LEARN_ERROR             = 5
 };
 
-// ======================== یک ورودی در جدول baseline ========================
+// ============================================================================
+// A baseline table entry
+// ============================================================================
 
 struct BaselineEntry {
-    uint32_t canId = 0;
-    uint8_t lastData[8] = {0};
-    uint8_t length = 0;
-    uint16_t seenCount = 0;   // چند بار در بازه‌ی baseline دیده شد
-    bool valid = false;
+    uint32_t canId       = 0;
+    uint8_t   lastData[8]   = {0};
+    uint8_t    length          = 0;
+    uint16_t    seenCount        = 0;    // Times seen during the baseline window
+    bool         valid              = false;
 };
 
-// ======================== یک کاندید نتیجه ========================
+// ============================================================================
+// A result candidate
+// ============================================================================
 
 struct LearnCandidate {
-    uint32_t canId = 0;
-    uint8_t data[8] = {0};
-    uint8_t length = 0;
-    bool isExtended = false;
-    bool isNewMessage = false;   // true اگر این CAN ID اصلاً در baseline نبود
-    uint16_t seenCountInAction = 0; // چند بار در بازه‌ی action دیده شد
-    uint16_t seenCountInBaseline = 0; // برای اولویت‌بندی: هرچه بیشتر در baseline دیده شده بود، احتمال نویز/پیام دوره‌ای بیشتر است
+    uint32_t canId               = 0;
+    uint8_t   data[8]               = {0};
+    uint8_t    length                  = 0;
+    bool        isExtended                = false;
+    bool         isNewMessage                = false;  // true if this CAN ID wasn't in the baseline at all
+    uint16_t      seenCountInAction             = 0;   // Times seen during the action window
+    uint16_t       seenCountInBaseline             = 0; // For ranking: the more it appeared in baseline, the more likely it's noise/periodic
 };
 
 class LearnEngine {
 public:
     LearnEngine(CANManager& canManager);
-    
+
     /**
-     * شروع فرآیند یادگیری برای یک برچسب مشخص. این متد فقط وضعیت
-     * داخلی را ریست می‌کند؛ ضبط واقعی با startBaselineCapture شروع
-     * می‌شود.
+     * Starts the learning process for a given label. Only resets
+     * internal state; actual capture begins with startBaselineCapture().
      */
     void beginLearning(const char* label, const char* displayName);
-    
+
     /**
-     * شروع ضبط پیش‌زمینه (baseline). فرض بر این است که کاربر هنوز
-     * دکمه فیزیکی خودرو را نزده. غیرمسدودکننده است - باید در حلقه‌ی
-     * اصلی update() به‌طور مکرر صدا زده شود تا زمان‌بندی پیش برود.
+     * Starts baseline capture. Assumes the user has not yet pressed the
+     * vehicle's physical button. Non-blocking - update() must be called
+     * repeatedly from the main loop for the timing to advance.
      */
     void startBaselineCapture();
-    
+
     /**
-     * باید در هر تکرار از loop() اصلی صدا زده شود (مثل سایر update
-     * های موجود در پروژه مانند tftUI.update()). این متد:
-     *   - در حالت BASELINE_CAPTURE / ACTION_CAPTURE: پیام‌های جدید
-     *     CAN را از CANManager می‌خواند (غیرمسدودکننده) و جدول را
-     *     به‌روزرسانی می‌کند
-     *   - وقتی زمان بازه تمام شود، خودکار به حالت بعدی می‌رود
+     * Must be called every main loop() iteration (like the project's
+     * other update() methods, e.g. tftUI.update()). This method:
+     *   - In BASELINE_CAPTURE / ACTION_CAPTURE: reads new CAN messages
+     *     from CANManager (non-blocking) and updates the table
+     *   - Automatically advances to the next state once the window elapses
      */
     void update();
-    
+
     /**
-     * کاربر تأیید کرده که آماده است دکمه فیزیکی را بزند. باعث
-     * می‌شود بازه‌ی ACTION_CAPTURE (به مدت LEARN_ACTION_CAPTURE_MS،
-     * حداکثر LEARN_ACTION_CAPTURE_MAX_MS) شروع شود.
+     * User has confirmed they're ready to press the physical button.
+     * Starts the ACTION_CAPTURE window (LEARN_ACTION_CAPTURE_MS,
+     * capped at LEARN_ACTION_CAPTURE_MAX_MS).
      */
     void confirmReadyForAction();
-    
-    /**
-     * لغو کامل فرآیند یادگیری فعلی و بازگشت به IDLE (بدون ذخیره).
-     */
+
+    /** Cancels the current learning process entirely, back to IDLE (no save). */
     void cancel();
-    
-    /**
-     * وضعیت فعلی state machine
-     */
+
     LearnModeState getState();
-    
-    /**
-     * تعداد کاندیدهای آماده (فقط معتبر وقتی state == LEARN_CANDIDATES_READY)
-     */
+
+    /** Number of ready candidates (only valid when state == LEARN_CANDIDATES_READY). */
     uint8_t getCandidateCount();
-    
+
     /**
-     * دریافت یک کاندید با ایندکس (مرتب‌شده بر اساس اولویت: پیام
-     * جدید کامل اول، سپس بر اساس کمترین seenCountInBaseline - یعنی
-     * کمتر شبیه پیام دوره‌ای/نویز)
+     * Retrieves a candidate by index (ranked: brand-new messages
+     * first, then by lowest seenCountInBaseline - i.e. least likely to
+     * be periodic/noise traffic).
      */
     bool getCandidate(uint8_t index, LearnCandidate& outCandidate);
-    
-    /**
-     * برچسب و نام نمایشی فعلی که در حال یادگیری آن هستیم
-     */
+
+    /** The label/display name currently being learned. */
     const char* getCurrentLabel();
     const char* getCurrentDisplayName();
-    
-    /**
-     * درصد پیشرفت بازه‌ی فعلی (۰-۱۰۰) - برای نوار پیشرفت در UI
-     */
+
+    /** Current window's progress percentage (0-100) - for the UI progress bar. */
     uint8_t getProgressPercent();
 
 private:
     CANManager& _can;
-    
+
     LearnModeState _state;
-    char _currentLabel[32];
-    char _currentDisplayName[48];
-    
+    char             _currentLabel[32];
+    char              _currentDisplayName[48];
+
     uint32_t _phaseStartTime;
     uint32_t _phaseDurationMs;
-    
+
     BaselineEntry _baseline[BASELINE_MAX_IDS];
-    uint8_t _baselineCount;
-    
+    uint8_t         _baselineCount;
+
     LearnCandidate _candidates[CANDIDATE_MAX];
-    uint8_t _candidateCount;
-    
-    // پیدا کردن یا افزودن یک ورودی در جدول baseline
+    uint8_t          _candidateCount;
+
+    /** Finds or adds a baseline table entry. */
     BaselineEntry* _findOrAddBaseline(uint32_t canId);
-    
-    // بررسی یک پیام دریافتی حین ACTION_CAPTURE و افزودن به کاندیدها
-    // در صورت متفاوت بودن از baseline
+
+    /** Checks a message received during ACTION_CAPTURE and adds it as a candidate if it differs from the baseline. */
     void _processActionMessage(const CanMessage& msg);
-    
-    // مرتب‌سازی کاندیدها بر اساس اولویت (پیام جدید > کمترین نویز baseline)
+
+    /** Ranks candidates by priority (new message > lowest baseline noise). */
     void _rankCandidates();
 };
 

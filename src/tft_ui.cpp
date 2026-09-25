@@ -17,9 +17,6 @@
 #include "active_profile_manager.h"
 #include "vehicle_control.h"
 #include <TFT_eSPI.h>
-#include <esp_task_wdt.h>
-#include <freertos/FreeRTOS.h>
-#include <freertos/task.h>
 
 // ============================================================================
 // Static state
@@ -249,30 +246,7 @@ void TFT_UI::begin() {
 // current TFT_ROTATION) into calData[5]. This is then persisted to NVS
 // so calibration isn't needed again on subsequent boots.
 
-namespace {
-    // State shared between runTouchCalibration() and the task below.
-    // IMPORTANT: TFT_eSPI::calibrateTouch()'s last argument is the
-    // on-screen crosshair *size* in pixels - NOT a millisecond timeout
-    // (an easy mistake to make, since it's easy to misread the header).
-    // The function has no timeout of its own: left alone, it blocks
-    // forever until every one of the 5 points registers a touch. If the
-    // touch controller isn't wired up yet, that's forever, full stop -
-    // no watchdog fix changes that, since the call simply never returns.
-    // To make this safe to boot without the touch panel connected, we
-    // run the call on its own task and bound it with a wall-clock
-    // timeout from the outside, killing the task if it doesn't finish.
-    volatile bool  s_calibDone = false;
-    TaskHandle_t   s_calibTaskHandle = nullptr;
-    uint16_t       s_calibData[5];
-
-    void calibTaskFn(void* /*param*/) {
-        tft.calibrateTouch(s_calibData, TFT_MAGENTA, TFT_BLACK, 15);
-        s_calibDone = true;
-        vTaskDelete(NULL);
-    }
-}
-
-bool TFT_UI::runTouchCalibration() {
+void TFT_UI::runTouchCalibration() {
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.setTextSize(2);
@@ -282,55 +256,18 @@ bool TFT_UI::runTouchCalibration() {
     tft.setCursor(20, 60);
     tft.println("چهار گوشه صفحه که چشمک می‌زنند را لمس کنید");
 
-    // Total wall-clock budget for the whole 5-point calibration. Generous
-    // enough for a driver who may be slow to tap each point, but bounded
-    // so an unwired/dead touch controller can't hang the board forever.
-    static const uint32_t CALIB_TIMEOUT_MS = 20000;
-
-    // This task (loopTask) is subscribed to the 8s task watchdog; below
-    // it only polls a flag every 50ms and never touches the display/SPI
-    // itself, but we still unsubscribe it for the duration since the
-    // wait can legitimately run longer than 8s.
-    esp_task_wdt_delete(NULL);
-
-    s_calibDone = false;
-    xTaskCreatePinnedToCore(calibTaskFn, "touchCalib", 4096, NULL, 1,
-                             &s_calibTaskHandle, 1);
-
-    uint32_t start = millis();
-    while (!s_calibDone && (millis() - start) < CALIB_TIMEOUT_MS) {
-        vTaskDelay(pdMS_TO_TICKS(50));
-    }
-
-    bool calibrated = s_calibDone;
-    if (!calibrated) {
-        // Touch controller never responded - most likely not wired up
-        // yet. Kill the stuck task (it's parked in a benign polling
-        // loop between SPI reads, safe to delete here) and move on
-        // without touch instead of hanging the whole board.
-        vTaskDelete(s_calibTaskHandle);
-        Serial.println("[TFT] Touch calibration timed out (panel not responding) - continuing without touch calibration");
-    }
-    s_calibTaskHandle = nullptr;
-
-    esp_task_wdt_add(NULL);
-    esp_task_wdt_reset();
-
-    if (!calibrated) {
-        // touchCalibrated stays false in config, so this wizard will run
-        // again on the next boot / from the Settings button once the
-        // touch panel is actually wired up. The rest of the UI still
-        // builds and runs fine - it just won't respond to touch yet.
-        tft.fillScreen(TFT_BLACK);
-        return false;
-    }
+    uint16_t calData[5];
+    // Params: crosshair color, background color, timeout in ms (15s per
+    // point - generous for a driver seated in a car whose hands may be
+    // occupied).
+    tft.calibrateTouch(calData, TFT_MAGENTA, TFT_BLACK, 15000);
 
     AppConfig* cfg = getConfig();
-    memcpy(cfg->touchCalData, s_calibData, sizeof(s_calibData));
+    memcpy(cfg->touchCalData, calData, sizeof(calData));
     cfg->touchCalibrated = true;
     saveConfig();
 
-    tft.setTouch(s_calibData);
+    tft.setTouch(calData);
 
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_GREEN, TFT_BLACK);
@@ -339,9 +276,7 @@ bool TFT_UI::runTouchCalibration() {
     delay(1000);  // Runs once at boot/settings only - blocking here has no impact
 
     Serial.printf("[TFT] Calibration saved: {%u,%u,%u,%u,%u}\n",
-                  s_calibData[0], s_calibData[1], s_calibData[2],
-                  s_calibData[3], s_calibData[4]);
-    return true;
+                  calData[0], calData[1], calData[2], calData[3], calData[4]);
 }
 
 // ============================================================================
@@ -1435,18 +1370,14 @@ void TFT_UI::_btnPasswordCancelEventHandler(lv_event_t* e) {
 
 void TFT_UI::_btnRecalibrateTouchEventHandler(lv_event_t* e) {
     if (pThisUI) {
-        // runTouchCalibration() is blocking (waits for 5 touch points,
-        // up to ~20s) and draws directly on the raw tft object, not
-        // through LVGL. The LVGL screen must be redrawn afterward
-        // (since calibration overwrote it with plain text) -
-        // lv_obj_invalidate on the active screen handles that.
-        bool ok = pThisUI->runTouchCalibration();
+        // runTouchCalibration() is blocking (waits for 5 touch points)
+        // and draws directly on the raw tft object, not through LVGL.
+        // The LVGL screen must be redrawn afterward (since calibration
+        // overwrote it with plain text) - lv_obj_invalidate on the
+        // active screen handles that.
+        pThisUI->runTouchCalibration();
         lv_obj_invalidate(lv_scr_act());
-        if (ok) {
-            pThisUI->showNotification("✅ کالیبراسیون لمس به‌روز شد");
-        } else {
-            pThisUI->showNotification("⚠️ لمسی دریافت نشد - اتصال پنل لمسی را بررسی کنید");
-        }
+        pThisUI->showNotification("✅ کالیبراسیون لمس به‌روز شد");
     }
 }
 

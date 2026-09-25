@@ -1,21 +1,22 @@
 /**
- * active_profile_manager.h - لایه‌ی یکپارچه‌ساز منابع فرمان
- * 
- * بخشی از CarTouch v2.0 (به CarTouch_V2_SPEC.md بخش ۳.۱ و ۷.۱ مراجعه کنید).
- * 
- * این کلاس واسط بین دو منبع فرمان است:
- *   - VehicleDB (فایل‌های DBC آماده - قابلیت موجود v1.0، بدون تغییر)
- *   - CustomVehicleStore (پروفایل‌های Learned/Manual - جدید در v2.0)
- * 
- * vehicle_control.cpp دیگر مستقیماً با VehicleDB یا CustomVehicleStore
- * کار نمی‌کند؛ فقط از این کلاس می‌پرسد "برای خودروی فعلی، فرمان با
- * این برچسب چیست؟" و یک CanMessage آماده‌ی ارسال (یا خطا) می‌گیرد.
- * 
- * ⚠️ نکته ایمنی: این کلاس مسئول چک کردن CMD_VERIFIED است. اگر منبع
- * فعال یک پروفایل سفارشی (Learned/Manual) باشد و فرمان مربوطه هنوز
- * CMD_UNVERIFIED باشد، resolveCommand باید false برگرداند - صرف
- * نظر از اینکه صدا زننده (vehicle_control) خودش این چک را دوباره
- * انجام می‌دهد یا نه (دفاع لایه‌ای / defense in depth).
+ * active_profile_manager.h - Command-source unification layer
+ *
+ * Part of CarTouch v2.0 (see CarTouch_SPEC.md sections 3.1 and 7.1).
+ *
+ * Sits between two command sources:
+ *   - VehicleDB (built-in DBC files - existing v1.0 functionality, unchanged)
+ *   - CustomVehicleStore (Learned/Manual profiles - new in v2.0)
+ *
+ * vehicle_control.cpp no longer talks to VehicleDB or CustomVehicleStore
+ * directly; it only asks this class "for the current vehicle, what is
+ * the command for this label?" and gets back a ready-to-send CanMessage
+ * (or an error).
+ *
+ * Safety note: this class is responsible for checking CMD_VERIFIED. If
+ * the active source is a custom profile (Learned/Manual) and the
+ * relevant command is still CMD_UNVERIFIED, resolveCommand() must
+ * return false - regardless of whether the caller (vehicle_control)
+ * also re-checks this itself (defense in depth).
  */
 
 #ifndef ACTIVE_PROFILE_MANAGER_H
@@ -26,63 +27,57 @@
 #include "custom_vehicle_store.h"
 #include "can_manager.h"
 
-// نوع منبع خودروی فعال در حال حاضر
+// Type of the currently active vehicle source
 enum ActiveVehicleKind : uint8_t {
-    ACTIVE_KIND_NONE   = 0,  // هنوز هیچ خودرویی انتخاب نشده
-    ACTIVE_KIND_DBC    = 1,  // یک پروفایل DBC آماده فعال است
-    ACTIVE_KIND_CUSTOM = 2   // یک پروفایل سفارشی (Learned/Manual) فعال است
+    ACTIVE_KIND_NONE   = 0,  // No vehicle selected yet
+    ACTIVE_KIND_DBC    = 1,  // A built-in DBC profile is active
+    ACTIVE_KIND_CUSTOM = 2   // A custom (Learned/Manual) profile is active
 };
 
 class ActiveProfileManager {
 public:
     ActiveProfileManager(VehicleDB& vehicleDB, CustomVehicleStore& customStore);
-    
+
     /**
-     * انتخاب یک خودروی DBC آماده به‌عنوان فعال (مسیر قدیمی موجود،
-     * دست‌نخورده - صرفاً wrapper دور VehicleDB::setActiveVehicle)
+     * Selects a built-in DBC vehicle as active (existing legacy path,
+     * unchanged - a thin wrapper around VehicleDB::setActiveVehicle).
      */
     void selectDBCVehicle(const char* brand, const char* model);
-    
+
     /**
-     * انتخاب یک پروفایل سفارشی (Learned/Manual) به‌عنوان فعال
-     * @param profileIndex ایندکس در CustomVehicleStore
-     * @return true اگر پروفایل معتبر بود
+     * Selects a custom (Learned/Manual) profile as active.
+     * @param profileIndex index within CustomVehicleStore
+     * @return true if the profile was valid
      */
     bool selectCustomVehicle(uint8_t profileIndex);
-    
-    /**
-     * نوع خودروی فعال فعلی
-     */
+
     ActiveVehicleKind getActiveKind();
-    
+
     /**
-     * حل کردن یک برچسب فرمان (مثلاً "lock_all") به یک CanMessage
-     * قابل ارسال، بر اساس منبع فعال فعلی.
-     * 
-     * @param label برچسب فرمان (از ثابت‌های CMD_LABEL_* در custom_vehicle.h)
-     * @param outMsg [out] پیام آماده ارسال در صورت موفقیت
-     * @param outErrorReason [out] در صورت شکست، دلیل به فارسی (برای نمایش در UI)
-     * @return true اگر فرمان پیدا و مجاز به اجرا بود (یعنی یا از
-     *         DBC است، یا از پروفایل سفارشی با status==CMD_VERIFIED)
+     * Resolves a command label (e.g. "lock_all") into a sendable
+     * CanMessage, based on the currently active source.
+     *
+     * @param label           command label (from the CMD_LABEL_* constants in custom_vehicle.h)
+     * @param outMsg          [out] the ready-to-send message on success
+     * @param outErrorReason  [out] on failure, a Persian reason string (shown in the UI)
+     * @return true if the command was found and is allowed to execute
+     *         (either sourced from DBC, or from a custom profile with
+     *         status==CMD_VERIFIED)
      */
     bool resolveCommand(const char* label, CanMessage& outMsg, String& outErrorReason);
-    
-    /**
-     * نام نمایشی خودروی فعال فعلی (برای نمایش در UI)
-     */
+
+    /** Display name of the currently active vehicle (for UI display). */
     void getActiveVehicleName(char* outBuf, size_t maxLen);
-    
-    /**
-     * ایندکس پروفایل سفارشی فعال (فقط معتبر اگر getActiveKind() == ACTIVE_KIND_CUSTOM)
-     */
+
+    /** Index of the active custom profile (only valid if getActiveKind() == ACTIVE_KIND_CUSTOM). */
     uint8_t getActiveCustomIndex();
 
 private:
-    VehicleDB& _vehicleDB;
-    CustomVehicleStore& _customStore;
-    
+    VehicleDB&              _vehicleDB;
+    CustomVehicleStore&        _customStore;
+
     ActiveVehicleKind _activeKind;
-    uint8_t _activeCustomIndex;
+    uint8_t             _activeCustomIndex;
 };
 
 #endif // ACTIVE_PROFILE_MANAGER_H

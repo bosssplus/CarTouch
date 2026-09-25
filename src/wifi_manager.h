@@ -1,11 +1,9 @@
 /**
- * wifi_manager.h - مدیریت اتصال WiFi
- * 
- * این ماژول وظیفه اتصال ESP32 به شبکه WiFi یا ایجاد Access Point را دارد.
- * در حالت AP، دستگاه به صورت مستقیم قابل دسترسی است.
- * در حالت STA، دستگاه به شبکه خانگی/محل کار متصل می‌شود.
- * 
- * تمام توابع این فایل تست شده و آماده استفاده هستند.
+ * wifi_manager.h - WiFi connectivity management
+ *
+ * Handles connecting the ESP32 to a WiFi network, or creating its own
+ * Access Point. In AP mode the device is reachable directly; in STA
+ * mode it joins an existing home/office network.
  */
 
 #ifndef WIFI_MANAGER_H
@@ -15,85 +13,54 @@
 #include <WiFi.h>
 #include "config.h"
 
-// وضعیت‌های WiFi
-// نکته: از پیشوند CT_ استفاده شده چون WIFI_AP و WIFI_STA در هسته‌ی
-// ESP32 Arduino از قبل به صورت ماکرو برای WIFI_MODE_AP / WIFI_MODE_STA
-// تعریف شده‌اند و هم‌نام‌سازی باعث خطای "conflicts with a previous
-// declaration" در کامپایل می‌شد.
+// WiFi state. Note: the CT_ prefix is used because WIFI_AP and
+// WIFI_STA are already defined as macros for WIFI_MODE_AP/WIFI_MODE_STA
+// in the ESP32 Arduino core - reusing those names caused a "conflicts
+// with a previous declaration" compile error.
 enum WiFiState : uint8_t {
     CT_WIFI_DISABLED = 0,
-    CT_WIFI_AP       = 1,     // Access Point mode
-    CT_WIFI_STA      = 2,     // Station mode (connected to router)
-    CT_WIFI_STA_FAIL = 3      // Station mode failed to connect
+    CT_WIFI_AP       = 1,   // Access Point mode
+    CT_WIFI_STA      = 2,   // Station mode (connected to a router)
+    CT_WIFI_STA_FAIL = 3    // Station mode failed to connect
 };
 
-/**
- * کلاس مدیریت WiFi
- */
 class WiFiManager {
 public:
     WiFiManager();
-    
+
     /**
-     * شروع WiFi
-     * @param mode حالت: 0=خاموش, 1=AP, 2=STA (با تلاش برای اتصال)
+     * Starts WiFi.
+     * @param mode 0 = off, 1 = AP, 2 = STA (attempts to connect)
      */
     void begin(uint8_t mode = 1);
-    
-    /**
-     * قطع WiFi
-     */
+
     void disconnect();
-    
+
     /**
-     * اسکن شبکه‌های موجود
-     * @param networks [out] آرایه برای ذخیره SSIDها
-     * @param maxCount حداکثر تعداد
-     * @return تعداد شبکه‌های یافت شده
+     * Scans for available networks.
+     * @param networks [out] array to store SSIDs
+     * @param maxCount  max entries to return
+     * @return number of networks found
      */
     uint8_t scanNetworks(char networks[][32], uint8_t maxCount = 10);
-    
-    /**
-     * اتصال به یک شبکه
-     * @param ssid نام شبکه
-     * @param password رمز عبور
-     * @return true در صورت موفقیت
-     */
+
+    /** Connects to a specific network. Returns true on success. */
     bool connectToNetwork(const char* ssid, const char* password);
-    
-    /**
-     * دریافت وضعیت جاری
-     */
+
     WiFiState getState();
-    
-    /**
-     * دریافت آدرس IP (در حالت AP یا STA)
-     */
+
+    /** Returns the IP address (AP or STA mode). */
     IPAddress getIP();
-    
-    /**
-     * بررسی اتصال
-     */
+
     bool isConnected();
-    
-    /**
-     * بررسی روشن بودن WiFi
-     */
     bool isEnabled();
-    
-    /**
-     * تنظیم روشن/خاموش
-     */
     void setEnabled(bool enabled);
 
 private:
     WiFiState _state;
-    bool _enabled;
-    
-    // شروع Access Point
+    bool       _enabled;
+
     void _startAP();
-    
-    // شروع Station
     void _startSTA();
 };
 

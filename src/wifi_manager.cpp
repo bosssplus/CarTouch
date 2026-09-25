@@ -1,128 +1,135 @@
 /**
- * wifi_manager.cpp - پیاده‌سازی مدیریت WiFi
- * 
- * تمام توابع این فایل تست شده و آماده استفاده هستند.
+ * wifi_manager.cpp - WiFi manager implementation
  */
 
 #include "wifi_manager.h"
 
-// ======================== سازنده ========================
+// ============================================================================
+// Constructor
+// ============================================================================
 
 WiFiManager::WiFiManager() {
-    _state = CT_WIFI_DISABLED;
-    _enabled = true;
+    _state    = CT_WIFI_DISABLED;
+    _enabled  = true;
 }
 
-// ======================== شروع ========================
+// ============================================================================
+// begin()
+// ============================================================================
 
 void WiFiManager::begin(uint8_t mode) {
     if (!_enabled) {
-        Serial.println("[WiFi] WiFi غیرفعال است");
+        Serial.println("[WiFi] WiFi is disabled");
         _state = CT_WIFI_DISABLED;
         return;
     }
-    
-    Serial.println("[WiFi] شروع WiFi...");
-    
+
+    Serial.println("[WiFi] Starting WiFi...");
+
     switch (mode) {
         case 0:
             WiFi.mode(WIFI_OFF);
             _state = CT_WIFI_DISABLED;
-            Serial.println("[WiFi] WiFi خاموش شد");
+            Serial.println("[WiFi] WiFi turned off");
             break;
-            
+
         case 1:
             _startAP();
             break;
-            
+
         case 2:
             _startSTA();
             break;
-            
+
         default:
             _startAP();
             break;
     }
 }
 
-// ======================== شروع Access Point ========================
+// ============================================================================
+// Access Point mode
+// ============================================================================
 
 void WiFiManager::_startAP() {
     WiFi.mode(WIFI_AP);
-    
-    // تنظیم نام و رمز AP
+
     bool result = WiFi.softAP(WIFI_AP_NAME, WIFI_AP_PASSWORD);
-    
+
     if (result) {
         _state = CT_WIFI_AP;
-        Serial.printf("[WiFi] Access Point: %s | IP: %s\n", 
+        Serial.printf("[WiFi] Access Point: %s | IP: %s\n",
                       WIFI_AP_NAME, WiFi.softAPIP().toString().c_str());
-        Serial.printf("[WiFi] رمز: %s\n", WIFI_AP_PASSWORD);
+        Serial.printf("[WiFi] Password: %s\n", WIFI_AP_PASSWORD);
     } else {
         _state = CT_WIFI_DISABLED;
-        Serial.println("⚠️ [WiFi] خطا در ایجاد Access Point");
+        Serial.println("[WiFi] Failed to create Access Point");
     }
 }
 
-// ======================== شروع Station ========================
+// ============================================================================
+// Station mode
+// ============================================================================
 
 void WiFiManager::_startSTA() {
     AppConfig* cfg = getConfig();
-    
-    // اگر SSID ذخیره نشده، به AP برو
+
     if (strlen(cfg->wifiSSID) == 0) {
-        Serial.println("[WiFi] SSID ذخیره نشده - استفاده از AP");
+        Serial.println("[WiFi] No saved SSID - falling back to AP mode");
         _startAP();
         return;
     }
-    
+
     WiFi.mode(WIFI_STA);
     WiFi.begin(cfg->wifiSSID, cfg->wifiPassword);
-    
-    Serial.printf("[WiFi] اتصال به %s...\n", cfg->wifiSSID);
-    
-    // انتظار برای اتصال
+
+    Serial.printf("[WiFi] Connecting to %s...\n", cfg->wifiSSID);
+
     int retry = 0;
     while (WiFi.status() != WL_CONNECTED && retry < WIFI_MAX_RETRY) {
         delay(500);
         Serial.print(".");
         retry++;
     }
-    
+
     if (WiFi.status() == WL_CONNECTED) {
         _state = CT_WIFI_STA;
-        Serial.printf("\n[WiFi] متصل شد! IP: %s\n", WiFi.localIP().toString().c_str());
+        Serial.printf("\n[WiFi] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
     } else {
         _state = CT_WIFI_STA_FAIL;
-        Serial.println("\n⚠️ [WiFi] اتصال ناموفق - استفاده از AP");
+        Serial.println("\n[WiFi] Connection failed - falling back to AP mode");
         _startAP();
     }
 }
 
-// ======================== قطع ========================
+// ============================================================================
+// Disconnect
+// ============================================================================
 
 void WiFiManager::disconnect() {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
     _state = CT_WIFI_DISABLED;
-    Serial.println("[WiFi] WiFi قطع شد");
+    Serial.println("[WiFi] WiFi disconnected");
 }
 
-// ======================== اسکن شبکه‌ها ========================
+// ============================================================================
+// Network scan
+// ============================================================================
 
 uint8_t WiFiManager::scanNetworks(char networks[][32], uint8_t maxCount) {
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
     delay(100);
-    
+
     int count = WiFi.scanNetworks();
     if (count < 0) {
-        Serial.println("⚠️ [WiFi] خطا در اسکن");
+        Serial.println("[WiFi] Scan failed");
         return 0;
     }
-    
-    Serial.printf("[WiFi] %d شبکه یافت شد\n", count);
-    
+
+    Serial.printf("[WiFi] Found %d networks\n", count);
+
     uint8_t result = 0;
     for (int i = 0; i < count && result < maxCount; i++) {
         String ssid = WiFi.SSID(i);
@@ -133,47 +140,47 @@ uint8_t WiFiManager::scanNetworks(char networks[][32], uint8_t maxCount) {
             result++;
         }
     }
-    
+
     return result;
 }
 
-// ======================== اتصال به شبکه ========================
+// ============================================================================
+// Connect to a network
+// ============================================================================
 
 bool WiFiManager::connectToNetwork(const char* ssid, const char* password) {
-    // ذخیره در تنظیمات
     AppConfig* cfg = getConfig();
     strncpy(cfg->wifiSSID, ssid, sizeof(cfg->wifiSSID) - 1);
     strncpy(cfg->wifiPassword, password, sizeof(cfg->wifiPassword) - 1);
     saveConfig();
-    
-    // اتصال
+
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
-    
+
     int retry = 0;
     while (WiFi.status() != WL_CONNECTED && retry < WIFI_MAX_RETRY) {
         delay(500);
         retry++;
     }
-    
+
     if (WiFi.status() == WL_CONNECTED) {
         _state = CT_WIFI_STA;
-        Serial.printf("[WiFi] به %s متصل شد. IP: %s\n", ssid, WiFi.localIP().toString().c_str());
+        Serial.printf("[WiFi] Connected to %s. IP: %s\n", ssid, WiFi.localIP().toString().c_str());
         return true;
     }
-    
-    Serial.printf("⚠️ [WiFi] اتصال به %s ناموفق\n", ssid);
+
+    Serial.printf("[WiFi] Failed to connect to %s\n", ssid);
     _state = CT_WIFI_STA_FAIL;
     return false;
 }
 
-// ======================== وضعیت ========================
+// ============================================================================
+// Status accessors
+// ============================================================================
 
 WiFiState WiFiManager::getState() {
     return _state;
 }
-
-// ======================== IP ========================
 
 IPAddress WiFiManager::getIP() {
     if (_state == CT_WIFI_AP) {
@@ -184,20 +191,14 @@ IPAddress WiFiManager::getIP() {
     return IPAddress(0, 0, 0, 0);
 }
 
-// ======================== بررسی اتصال ========================
-
 bool WiFiManager::isConnected() {
     return (_state == CT_WIFI_STA && WiFi.status() == WL_CONNECTED) ||
            (_state == CT_WIFI_AP);
 }
 
-// ======================== روشن بودن ========================
-
 bool WiFiManager::isEnabled() {
     return _enabled;
 }
-
-// ======================== تنظیم روشن/خاموش ========================
 
 void WiFiManager::setEnabled(bool enabled) {
     _enabled = enabled;
