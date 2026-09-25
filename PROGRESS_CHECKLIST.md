@@ -95,8 +95,31 @@ patch.
 - `CHANGELOG.md` - v2.1 section added; known-issues list reconciled.
 - `CarTouch_SPEC.md` - stale sections patched (7.2, 11.2, 12).
 - `PROGRESS_CHECKLIST.md` - this file.
-- Source comments (`src/*.cpp`, `src/*.h`) - in progress; being
-  translated to concise English and re-synced with current behavior as
-  each file is touched. Completed so far: `can_manager.*`,
-  `vehicle_control.*`, `main.cpp`. Remaining files still carry the
-  original Persian comments from earlier sessions.
+- Source comments (`src/*.cpp`, `src/*.h`) - **complete**. All 24
+  source files (every `.h`/`.cpp` pair in `src/`) have been translated
+  to concise English and re-synced with current behavior, including
+  files with no logic changes this round (`wifi_manager.*`,
+  `custom_vehicle.h`, `custom_vehicle_store.*`, `learn_engine.*`,
+  `active_profile_manager.*`) for project-wide language consistency.
+  User-facing strings (LVGL button labels, JSON error messages shown in
+  the web UI, the embedded OTA HTML page) were deliberately left in
+  Persian throughout, since that is the product's actual UI language -
+  every such string was individually verified present and unchanged
+  after translation (see verification notes below). Only code comments
+  and `Serial` log messages (developer-facing only) were translated.
+
+### Verification performed on the translation pass
+
+- Brace/parenthesis balance checked on all 24 files - zero mismatches.
+- All 79 LVGL `lv_label_set_text` string literals in `tft_ui.cpp`
+  diffed against the pre-translation version - zero missing.
+- All JSON `"error"` fields returned by `webserver.cpp`'s API routes
+  diffed against the pre-translation version - exact match.
+- The embedded OTA update HTML page in `webserver.cpp` diffed
+  byte-for-byte against the pre-translation version - identical.
+- Project-wide scan for comment lines still containing Persian
+  characters - zero remaining.
+- `learn_engine.cpp`/`.h` specifically checked for any `sendMessage`
+  call (the file's core safety invariant - it must only ever listen,
+  never transmit) - confirmed zero actual calls; the only match is the
+  reminder comment describing the rule itself.
