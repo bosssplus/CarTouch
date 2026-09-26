@@ -15,10 +15,25 @@ on:
   pull_request:
   workflow_dispatch:
 
+# اگر روی یک برنچ چند push پشت‌سرهم بیاید، بیلد قدیمی‌تر لغو می‌شود
+# (به‌جای اینکه چند بیلد هم‌زمان صف بکشند و runner minutes هدر برود)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# پیش‌فرض GitHub برای permissions می‌تواند به‌قدر نیاز کار write هم
+# بدهد؛ چون این workflow فقط می‌خواند/کامپایل می‌کند و چیزی به ریپو
+# پس نمی‌نویسد، صریحاً به read-only محدود می‌شود (اصل کمترین دسترسی -
+# همان روحیه‌ی امنیتی که در بقیه‌ی پروژه رعایت شده)
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build (esp32-s3-devkitc-1)
     runs-on: ubuntu-latest
+    # جلوی یک runner گیرکرده/هنگ را می‌گیرد (پیش‌فرض GitHub ۳۶۰ دقیقه‌ست)
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
@@ -41,7 +56,10 @@ jobs:
             pio-${{ runner.os }}-
 
       - name: Install PlatformIO
-        run: pip install --upgrade platformio
+        # نسخه‌ی اصلی روی ۶ پین شده تا یک major release جدید و
+        # ناسازگار بی‌خبر بیلد را خراب نکند؛ رفع نسخه (patch/minor)
+        # همچنان آزاد است تا رفع باگ‌های PlatformIO خودکار برسد
+        run: pip install "platformio>=6.1,<7"
 
       # 1) کامپایل فریمویر - مرحله اصلی تست/اعتبارسنجی
       #    اگه کد خطای کامپایل داشته باشه، اینجا fail میشه
