@@ -23,6 +23,7 @@
 #include "custom_vehicle_store.h"
 #include "learn_engine.h"
 #include "active_profile_manager.h"
+#include "error_log.h"
 
 // ============================================================================
 // Global objects
@@ -126,6 +127,10 @@ void setup() {
     Serial.println("[INIT] Loading configuration...");
     loadConfig();
 
+    // 1b. Error log / telemetry (checklist item 16) - started right
+    // after config so every subsequent init step can log through it.
+    getErrorLog()->begin();
+
     // 2. SPIFFS (web assets, DBC files, custom profiles)
     Serial.println("[INIT] Starting SPIFFS...");
     if (!SPIFFS.begin(false)) {
@@ -141,7 +146,7 @@ void setup() {
     // 3. CAN Bus
     Serial.println("[INIT] Starting CAN Bus...");
     if (!canManager.begin()) {
-        Serial.println("[INIT] CAN Bus failed to start - check wiring");
+        getErrorLog()->log(LOG_CAT_CAN, LOG_ERROR, "CAN Bus failed to start at boot");
         tftUI.showNotification("CAN Bus error!");
     } else {
         canManager.flushRxQueue();
@@ -206,6 +211,11 @@ void setup() {
 void loop() {
     // Feed the watchdog every iteration.
     esp_task_wdt_reset();
+
+    // Flush error-log counters to NVS at most every 5 minutes (see
+    // error_log.h) - cheap to call every loop() since it no-ops unless
+    // both the dirty flag and the interval have elapsed.
+    getErrorLog()->maybeSaveCounters();
 
     // 1. LVGL
     tftUI.update();

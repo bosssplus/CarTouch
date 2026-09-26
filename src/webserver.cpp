@@ -12,6 +12,7 @@
 
 #include "webserver.h"
 #include "custom_vehicle.h"
+#include "error_log.h"
 #include <SPIFFS.h>
 #include <esp_random.h>
 #include <Update.h>
@@ -281,7 +282,10 @@ void WebServerManager::begin(uint16_t port) {
             response->addHeader("Set-Cookie", "cartouch_session=" + _sessionToken + "; Path=/; HttpOnly");
             request->send(response);
         } else {
-            Serial.println("[WEB] Failed login attempt");
+            // Deliberately does not log the submitted username/password -
+            // only that an attempt failed, for basic brute-force
+            // visibility without storing credential-adjacent data.
+            getErrorLog()->log(LOG_CAT_WEB, LOG_WARN, "Failed login attempt");
             request->send(401, "text/html; charset=utf-8", "<html><head><meta charset='utf-8'></head><body dir='rtl'><h3>نام کاربری یا رمز اشتباه است</h3><a href='/'>بازگشت</a></body></html>");
         }
     });
@@ -348,6 +352,16 @@ void WebServerManager::begin(uint16_t port) {
             return;
         }
         _handleAPIStatus(request);
+    });
+
+    // Checklist item 16 (error logging/telemetry) - read-only, same
+    // auth level as everything else. See error_log.h.
+    _server.on("/api/logs", HTTP_GET, [this](AsyncWebServerRequest* request) {
+        if (!_authenticate(request)) {
+            request->send(401, "application/json", "{\"error\":\"Unauthorized\"}");
+            return;
+        }
+        request->send(200, "application/json", getErrorLog()->toJSON());
     });
 
     // -- OTA: firmware/filesystem update via browser (behind the same auth) --------
@@ -978,6 +992,11 @@ void WebServerManager::_handleWebSocketEvent(AsyncWebSocket* server,
                     }
                 } else if (strcmp(msgType, "ping") == 0) {
                     client->printf("{\"type\":\"pong\"}");
+                } else if (strcmp(msgType, "get_logs") == 0) {
+                    // Same data as GET /api/logs, available over the
+                    // existing authenticated WebSocket connection too
+                    // (checklist item 16 - error logging/telemetry).
+                    client->text(getErrorLog()->toJSON());
                 } else if (strncmp(msgType, "learn_", 6) == 0 || strncmp(msgType, "verify_", 7) == 0) {
                     // The same rate limit as regular commands also
                     // applies to verify_command, since that message can
@@ -1012,6 +1031,7 @@ bool WebServerManager::_authenticate(AsyncWebServerRequest* request) {
     AppConfig* cfg = getConfig();
 
     if (!request->authenticate(cfg->webUser, cfg->webPass)) {
+        getErrorLog()->log(LOG_CAT_WEB, LOG_WARN, "Failed basic-auth attempt (%s)", request->url().c_str());
         request->requestAuthentication("CarTouch");
         return false;
     }

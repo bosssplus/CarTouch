@@ -11,23 +11,28 @@
  * unknown/untested command onto a real vehicle's live bus, which can
  * affect safety-critical systems (brakes, airbags, steering).
  *
- * Known limitation (documented honestly, not hidden):
- * Per SPEC section 3.3, the ideal design would have the TWAI driver
- * actually reinstalled with TWAI_MODE_LISTEN_ONLY when entering
- * LEARN_BASELINE_CAPTURE/LEARN_ACTION_CAPTURE (rather than relying
- * solely on this class never calling sendMessage), so a hardware-level
- * guarantee exists even against a hypothetical future software bug.
- * This isn't implemented in the current version because
- * CANManager::begin/end is synchronous and relatively slow (a few
- * hundred milliseconds), and doing it in the middle of a time-sensitive
- * 2-second window (e.g. right after confirmReadyForAction) could itself
- * cause exactly the messages meant to be captured to be missed. The
- * correct fix is a "fast reconfigure without a full uninstall/install"
- * path in CANManager - a specific item for future work (SPEC section
- * 12), not something to guess at and half-implement here. Until then,
- * safety in this area rests entirely on the code-level guarantee (this
- * file never calls sendMessage), which is verifiable by review since
- * the file is kept short and focused.
+ * Hardware-level guarantee (added in v2.2, per SPEC section 3.3):
+ * beginLearning() now forces the TWAI driver into a real
+ * TWAI_MODE_LISTEN_ONLY via CANManager::reconfigureMode(true) before
+ * any capture window opens, and cancel() restores whatever mode was
+ * active before learning started. cancel() is called on save success
+ * and on explicit cancel (see webserver.cpp / tft_ui.cpp) - but
+ * deliberately NOT on save failure (e.g. no profile selected, storage
+ * full), so the user can pick a different candidate/profile and retry
+ * without recapturing. This is still safe either way: staying in
+ * forced hardware Listen-Only for longer than strictly necessary is
+ * the safe direction, never the unsafe one. startBaselineCapture() and confirmReadyForAction() each
+ * re-check CANManager::isListenOnlyActive() before opening their
+ * capture window and refuse (LEARN_ERROR) if the driver isn't
+ * actually in listen-only - so a hardware-level guarantee now backs
+ * this up, not just review of this file. The uninstall/reinstall this
+ * requires is slow (hundreds of ms); this is accepted because
+ * beginLearning() runs before baseline capture starts (which itself
+ * takes seconds), so the delay lands before any time-sensitive window
+ * rather than inside one (SPEC section 3.3, option "a"). Even so,
+ * this file must still never call sendMessage() itself - the two
+ * guarantees are independent layers, not a replacement for each
+ * other.
  *
  * Algorithm (summary; full detail in SPEC section 4.1):
  *   1. IDLE -> starts when the user picks a command label
@@ -93,8 +98,16 @@ public:
     LearnEngine(CANManager& canManager);
 
     /**
-     * Starts the learning process for a given label. Only resets
-     * internal state; actual capture begins with startBaselineCapture().
+     * Starts the learning process for a given label. Resets internal
+     * state, and forces the TWAI driver into a real hardware
+     * listen-only mode via CANManager::reconfigureMode(true) (SPEC
+     * section 3.3) - remembering whatever mode was active before, so
+     * cancel() can restore it. Actual capture begins with
+     * startBaselineCapture().
+     *
+     * If the forced mode switch fails, the state is set to
+     * LEARN_ERROR instead (checkable via getState()) and
+     * startBaselineCapture() will refuse to start a capture window.
      */
     void beginLearning(const char* label, const char* displayName);
 
@@ -121,7 +134,16 @@ public:
      */
     void confirmReadyForAction();
 
-    /** Cancels the current learning process entirely, back to IDLE (no save). */
+    /**
+     * Cancels the current learning process entirely, back to IDLE (no
+     * save). Also restores the CAN driver's mode to whatever it was
+     * before beginLearning() forced listen-only (SPEC section 3.3).
+     * Called on a successful save and on explicit user cancellation -
+     * see webserver.cpp's learn_save/learn_cancel and tft_ui.cpp's
+     * save/close handlers. Deliberately NOT called when a save
+     * attempt fails, so the session stays open for a retry (see the
+     * class-level comment above).
+     */
     void cancel();
 
     LearnModeState getState();
@@ -158,6 +180,10 @@ private:
 
     LearnCandidate _candidates[CANDIDATE_MAX];
     uint8_t          _candidateCount;
+
+    // -- Hardware listen-only enforcement (SPEC section 3.3) -----------------
+    bool _forcedListenOnly;      // true if beginLearning() had to switch the driver
+    bool _previousListenOnlyMode; // cfg->listenOnlyMode as it was before the switch
 
     /** Finds or adds a baseline table entry. */
     BaselineEntry* _findOrAddBaseline(uint32_t canId);

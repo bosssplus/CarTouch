@@ -3,6 +3,7 @@
  */
 
 #include "wifi_manager.h"
+#include "error_log.h"
 
 // ============================================================================
 // Constructor
@@ -97,7 +98,7 @@ void WiFiManager::_startSTA() {
         Serial.printf("\n[WiFi] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
     } else {
         _state = CT_WIFI_STA_FAIL;
-        Serial.println("\n[WiFi] Connection failed - falling back to AP mode");
+        getErrorLog()->log(LOG_CAT_WIFI, LOG_WARN, "Connect failed - falling back to AP mode");
         _startAP();
     }
 }
@@ -169,7 +170,7 @@ bool WiFiManager::connectToNetwork(const char* ssid, const char* password) {
         return true;
     }
 
-    Serial.printf("[WiFi] Failed to connect to %s\n", ssid);
+    getErrorLog()->log(LOG_CAT_WIFI, LOG_WARN, "Failed to connect to %s", ssid);
     _state = CT_WIFI_STA_FAIL;
     return false;
 }

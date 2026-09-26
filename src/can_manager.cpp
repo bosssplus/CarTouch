@@ -7,6 +7,7 @@
 
 #include "can_manager.h"
 #include "driver/twai.h"
+#include "error_log.h"
 
 // ============================================================================
 // Constructor
@@ -181,15 +182,15 @@ bool CANManager::sendMessage(const CanMessage& msg, uint32_t timeout) {
 
     if (err == ESP_ERR_TIMEOUT) {
         _lastError = CAN_ERROR_TIMEOUT;
-        Serial.println("[CAN] Send timeout");
+        getErrorLog()->log(LOG_CAT_CAN, LOG_WARN, "Send timeout, ID 0x%03X", msg.id);
     } else {
         _lastError = CAN_ERROR_TX;
-        Serial.printf("[CAN] Send error: %d\n", err);
+        getErrorLog()->log(LOG_CAT_CAN, LOG_WARN, "Send error %d, ID 0x%03X", err, msg.id);
 
         twai_status_info_t status;
         twai_get_status_info(&status);
         if (status.state == TWAI_STATE_BUS_OFF) {
-            Serial.println("[CAN] Bus-Off detected - attempting recovery");
+            getErrorLog()->log(LOG_CAT_CAN, LOG_ERROR, "Bus-off detected - attempting recovery");
             recoverFromBusOff();
         }
     }
@@ -239,6 +240,7 @@ bool CANManager::receiveMessage(CanMessage& msg, uint32_t timeout) {
 
     _errorCount++;
     _lastError = CAN_ERROR_RX;
+    getErrorLog()->log(LOG_CAT_CAN, LOG_WARN, "Receive error %d", err);
     return false;
 }
 
@@ -283,11 +285,11 @@ bool CANManager::recoverFromBusOff() {
     esp_err_t err = twai_start();
     if (err == ESP_OK) {
         _lastError = CAN_OK;
-        Serial.println("[CAN] Bus-Off recovery successful");
+        getErrorLog()->log(LOG_CAT_CAN, LOG_INFO, "Bus-off recovery successful");
         return true;
     }
 
-    Serial.printf("[CAN] Recovery failed: %d\n", err);
+    getErrorLog()->log(LOG_CAT_CAN, LOG_ERROR, "Bus-off recovery failed: %d", err);
     _lastError = CAN_ERROR_BUS_OFF;
     return false;
 }
