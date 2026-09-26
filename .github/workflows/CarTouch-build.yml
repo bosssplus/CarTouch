@@ -78,13 +78,10 @@ jobs:
 
       # 4) آپلود فایل‌های نهایی فلش به‌عنوان Artifact
       #    شامل: firmware.bin, bootloader.bin, partitions.bin, spiffs.bin, firmware.elf
-      #    نام آرتیفکت شامل SHA کوتاه commit است تا بیلدهای مختلف در تب
-      #    Actions قابل تشخیص از هم باشند (قبلاً هر بیلد یک نام ثابت
-      #    داشت و بیلد جدید بیلد قبلی را در لیست گم می‌کرد)
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cartouch-firmware-${{ github.sha }}
+          name: cartouch-firmware
           path: |
             .pio/build/esp32-s3-devkitc-1/*.bin
             .pio/build/esp32-s3-devkitc-1/firmware.elf
