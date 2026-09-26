@@ -20,7 +20,7 @@ in progress, and what's out of scope for code changes entirely
 | # | Item | Files | Summary |
 |---|------|-------|---------|
 | 2  | Task watchdog | `main.cpp` | `esp_task_wdt`, 8s timeout; `esp_task_wdt_reset()` at the top of `loop()`. Version-gated for both Arduino-ESP32 2.x and 3.x |
-| 3  | Hardware-enforced Listen-Only (global toggle only) | `can_manager.h/.cpp`, `main.cpp` | `reconfigureMode()` performs a real TWAI driver uninstall/reinstall to switch mode at runtime; wired into the `listen_only` command handler. **Not yet wired into Learn Mode entry** (`LearnEngine::beginLearning`/`startBaselineCapture`, called from `webserver.cpp`'s `learn_start` and the TFT Learn Wizard) — see `CarTouch_SPEC.md` §3.3 and the matching entry in `CHANGELOG.md`'s known-issues list. Learn Mode's safety still rests on the code-level guarantee only (`LearnEngine` never calls `sendMessage` — verified, see below) |
+| 3  | Hardware-enforced Listen-Only (global toggle + Learn Mode) | `can_manager.h/.cpp`, `main.cpp`, `learn_engine.h/.cpp` | `reconfigureMode()` performs a real TWAI driver uninstall/reinstall to switch mode at runtime; wired into the `listen_only` command handler. **v2.2:** also wired into Learn Mode entry — `LearnEngine::beginLearning()` now forces real `TWAI_MODE_LISTEN_ONLY` before any capture window opens (remembering the prior mode), `startBaselineCapture()`/`confirmReadyForAction()` each re-check `isListenOnlyActive()` before opening their window and refuse into `LEARN_ERROR` otherwise, and `cancel()` (called on every learn-session exit path) restores the prior mode, staying in Listen-Only (fail-safe) if the restore itself fails. See `CarTouch_SPEC.md` §3.3 and `CHANGELOG.md` v2.2 |
 | 4  | Non-blocking OBD-II | `obd2_reader.h/.cpp`, `main.cpp` | Rewritten as a state machine; zero `delay()` on the main path |
 | 6  | Motorola/Intel endianness | `vehicle_db.h/.cpp` | Real bit-mapping for both signal byte orders; verified with an independent simulation |
 | 7  | DBC vehicle list | `vehicle_db.h/.cpp` | 4 -> 38 vehicles wired (of 57 bundled files); omissions documented with reasons |
@@ -28,8 +28,21 @@ in progress, and what's out of scope for code changes entirely
 | 9  | Touch calibration | `tft_ui.h/.cpp`, `config.h/.cpp` | Real 5-point `calibrateTouch()` wizard on first boot, persisted to NVS, re-run button in Settings |
 | 19 | Mechanical duty-cycle | `vehicle_control.h/.cpp` | Per-actuator-class cumulative activation limit + cooldown, on top of the existing flat rate limit |
 | 20 | TFT/web session sync | `config.h/.cpp`, `webserver.h/.cpp` | Global callback: a password change from either interface invalidates all web sessions (HTTP + WebSocket) |
+| 16 | Error logging / telemetry | `error_log.h/.cpp` (new), wired into `can_manager.cpp`, `wifi_manager.cpp`, `webserver.cpp`, `learn_engine.cpp`, `main.cpp` | RAM ring buffer of the last 40 events (`GET /api/logs`, WebSocket `get_logs`) plus NVS-persisted cumulative counters, saved at most every 5 minutes to limit flash wear. See `CarTouch_SPEC.md` §13 and `CHANGELOG.md` v2.3 |
 
 ## Notable discoveries during review
+
+- **v2.3 doc/code mismatch found and fixed:** `learn_engine.h`,
+  `CarTouch_SPEC.md` §3.3, and the v2.2 `CHANGELOG.md` entry all
+  claimed `LearnEngine::cancel()` runs on "save success, save
+  failure, or explicit cancel." The actual code (`webserver.cpp`,
+  `tft_ui.cpp`) never called it on save failure - by design, so the
+  user can retry without recapturing. Not a safety issue (staying in
+  forced Listen-Only longer is always the safe direction), but the
+  docs were wrong about what the code does. Comments/docs corrected
+  to match the code; the code itself was not changed. This is exactly
+  the kind of drift `HANDOFF_NEXT_AI.md`'s "golden rule" warns about -
+  worth a second look at other cross-references next session too.
 
 - **Item 11 (OTA)** was already fully implemented (`/update` endpoint,
   firmware.bin/spiffs.bin upload) - older docs claiming "no OTA" were
@@ -57,7 +70,6 @@ in progress, and what's out of scope for code changes entirely
 
 | # | Item | Status |
 |---|------|--------|
-| 3b | Wire `reconfigureMode()` into Learn Mode entry | **Not started** - `beginLearning()`/`startBaselineCapture()` don't call it yet; two options outlined in `CarTouch_SPEC.md` §3.3 |
 | 1  | HTTPS/TLS | **Investigated, deliberately deferred** - see note below |
 | 5  | Rolling code / newer-vehicle security | **Out of scope for code** - requires per-vehicle ECU reverse engineering |
 | 10 | Documenting the DBC write-command limitation | Docs only, no code needed (covered in README/SPEC) |
@@ -65,7 +77,6 @@ in progress, and what's out of scope for code changes entirely
 | 13 | Secure device provisioning/pairing | Not started |
 | 14 | Legacy protocol auto-detect (ISO9141/KWP2000) | Not started |
 | 15 | EMC / regulatory certification | **Out of scope for code** - requires a certification lab |
-| 16 | Error logging / telemetry | Not started |
 | 17 | Legal liability / disclaimer | **Out of scope for code** - requires legal counsel |
 | 18 | Field testing on a real fleet | **Out of scope without hardware and vehicles** |
 
@@ -96,9 +107,14 @@ patch.
 
 - `README.md` - rewritten to match current code; the stale "no OTA"
   claim removed.
-- `CHANGELOG.md` - v2.1 section added; known-issues list reconciled.
-- `CarTouch_SPEC.md` - stale sections patched (7.2, 11.2, 12).
+- `CHANGELOG.md` - v2.1/v2.2/v2.3 sections added; known-issues list
+  reconciled each time.
+- `CarTouch_SPEC.md` - stale sections patched (7.2, 11.2, 12); §3.3
+  corrected in v2.3 (see "Notable discoveries" above); new §13 added
+  for the error-log module, old §13 renumbered to §14.
 - `PROGRESS_CHECKLIST.md` - this file.
+- `HANDOFF_NEXT_AI.md` - superseded by a v2.3 rewrite; see that file's
+  own history note at the top.
 - Source comments (`src/*.cpp`, `src/*.h`) - **complete**. All 24
   source files (every `.h`/`.cpp` pair in `src/`) have been translated
   to concise English and re-synced with current behavior, including

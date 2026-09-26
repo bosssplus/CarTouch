@@ -4,7 +4,7 @@
 
 **کنترل و مانیتورینگ خودرو با ESP32-S3 و CAN Bus — لمسی، وب، و یادگیرنده**
 
-![CarTouch](https://img.shields.io/badge/CarTouch-v2.0-blue)
+![CarTouch](https://img.shields.io/badge/CarTouch-v2.3-blue)
 ![ESP32-S3](https://img.shields.io/badge/ESP32--S3-N16R8-green)
 ![CAN Bus](https://img.shields.io/badge/CAN-500Kbps-orange)
 ![LVGL](https://img.shields.io/badge/LVGL-8.4-purple)
@@ -491,7 +491,7 @@ CarTouch/
 ├── platformio.ini                # تنظیمات PlatformIO، پین‌ها و کتابخانه‌ها
 ├── README.md                     # همین فایل
 ├── CHANGELOG.md                  # تاریخچه تغییرات + مشکلات شناخته‌شده
-├── CarTouch_SPEC.md              # مشخصات فنی کامل v2.0 (مرجع توسعه)
+├── CarTouch_SPEC.md              # مشخصات فنی کامل (مرجع توسعه، به‌روز تا v2.3)
 ├── PROGRESS_CHECKLIST.md         # وضعیت گام‌به‌گام اصلاحات نسخه‌ی تجاری
 ├── .github/workflows/            # بیلد خودکار در GitHub Actions
 ├── src/
@@ -507,7 +507,8 @@ CarTouch/
 │   ├── custom_vehicle.h          # ساختار پروفایل‌های سفارشی
 │   ├── custom_vehicle_store.*    # ذخیره JSON در SPIFFS
 │   ├── learn_engine.*            # موتور یادگیری (capture/diff)
-│   └── active_profile_manager.*  # یکپارچه‌ساز DBC + سفارشی
+│   ├── active_profile_manager.*  # یکپارچه‌ساز DBC + سفارشی
+│   └── error_log.*               # لاگ خطا/تله‌متری (v2.3) - GET /api/logs
 └── data/                         # محتوای SPIFFS
     ├── index.html, style.css, app.js   # وب (۴ تب: کنترل/داشبورد/یادگیری/تنظیمات)
     ├── dbc/                            # ۵۷ فایل DBC از OpenDBC (۳۸ مدل وصل‌شده)
