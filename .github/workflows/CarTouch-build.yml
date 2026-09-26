@@ -1,6 +1,15 @@
 name: Build Firmware
 
 # اجرا: با هر push و Pull Request (روی همه برنچ‌ها)، و امکان اجرای دستی از تب Actions
+#
+# توجه: دو مرحله‌ی قبلی «رمزگشایی بک‌تریس کرش» و «بازرسی محل کرش
+# TFT_eSPI» از این فایل حذف شدند. آن دو مرحله برای یک جلسه‌ی دیباگ
+# مشخص در گذشته نوشته شده بودند (با آدرس‌های حافظه‌ی هاردکد مخصوص
+# همان کرش خاص) و در بیلد پایدار/تجاری هر بار همان آدرس‌های قدیمی و
+# بی‌ربط را روی فریمویر جدید اجرا می‌کردند - که یا بی‌فایده بود یا
+# گمراه‌کننده. اگر لازم شد یک کرش واقعی جدید دیباگ شود، این دو مرحله
+# را می‌توان موقتاً و با آدرس‌های تازه به یک workflow_dispatch جدا
+# اضافه کرد، نه اینکه در بیلد اصلی هر push بمانند.
 on:
   push:
   pull_request:
@@ -49,46 +58,15 @@ jobs:
         run: pio check -e esp32-s3-devkitc-1 --skip-packages
         continue-on-error: true
 
-      # 3.5) رمزگشایی بک‌ترِیس کرش (Guru Meditation) - فقط اطلاع‌رسانی
-      #    آدرس‌ها را از لاگ سریال بردار و در BACKTRACE بگذار.
-      #    اگر SHA اولِ خروجی با «ELF file SHA256» لاگ برد یکی نبود، آدرس‌ها معتبر نیستند.
-      - name: Decode crash backtrace
-        continue-on-error: true
-        env:
-          BACKTRACE: "0x4200f0a8 0x4200f185 0x4200f190 0x42008e09 0x42006e6a 0x420455ca"
-        run: |
-          ELF=.pio/build/esp32-s3-devkitc-1/firmware.elf
-          echo "ELF SHA256 (16 char اول): $(sha256sum $ELF | cut -c1-16)"
-          A2L=$(find ~/.platformio -name 'xtensa-esp32s3-elf-addr2line' | head -1)
-          echo "addr2line: $A2L"
-          $A2L -pfiaC -e $ELF $BACKTRACE
-
-      # 3.6) بازرسی محل کرش TFT_eSPI (فقط اطلاع‌رسانی، بیلد را fail نمی‌کند)
-      #    خروجی این مرحله را در لاگ Actions ببین و بفرست.
-      - name: Inspect TFT_eSPI crash site
-        continue-on-error: true
-        run: |
-          ELF=.pio/build/esp32-s3-devkitc-1/firmware.elf
-          LIB=.pio/libdeps/esp32-s3-devkitc-1/TFT_eSPI
-          FW=~/.platformio/packages/framework-arduinoespressif32
-          OBJDUMP=$(find ~/.platformio -name 'xtensa-esp32s3-elf-objdump' | head -1)
-          echo "===== 1) دیس‌اسمبلی اطراف PC کرش ====="
-          $OBJDUMP -d --start-address=0x4200f070 --stop-address=0x4200f0c0 $ELF || true
-          echo "===== 2) سورس TFT_eSPI.cpp خطوط 70 تا 90 ====="
-          sed -n '70,90p' $LIB/TFT_eSPI.cpp || true
-          echo "===== 3) تعریف SPI_PORT و _spi_user در TFT_eSPI ====="
-          grep -rn "SPI_PORT\|USE_HSPI_PORT\|USE_FSPI_PORT\|_spi_user\|SET_BUS_WRITE_MODE" $LIB/Processors/TFT_eSPI_ESP32_S3.h $LIB/TFT_eSPI.h | head -40 || true
-          echo "===== 4) تعریف FSPI/HSPI/VSPI در هسته آردوینو ====="
-          grep -n "define FSPI\|define HSPI\|define VSPI" $FW/cores/esp32/esp32-hal-spi.h || true
-          echo "===== 5) REG_SPI_BASE در SDK ====="
-          grep -rn "define REG_SPI_BASE" $FW/tools/sdk/esp32s3/include | head -5 || true
-
       # 4) آپلود فایل‌های نهایی فلش به‌عنوان Artifact
-      #    شامل: firmware.bin, bootloader.bin, partitions.bin, spiffs.bin
+      #    شامل: firmware.bin, bootloader.bin, partitions.bin, spiffs.bin, firmware.elf
+      #    نام آرتیفکت شامل SHA کوتاه commit است تا بیلدهای مختلف در تب
+      #    Actions قابل تشخیص از هم باشند (قبلاً هر بیلد یک نام ثابت
+      #    داشت و بیلد جدید بیلد قبلی را در لیست گم می‌کرد)
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cartouch-firmware
+          name: cartouch-firmware-${{ github.sha }}
           path: |
             .pio/build/esp32-s3-devkitc-1/*.bin
             .pio/build/esp32-s3-devkitc-1/firmware.elf
