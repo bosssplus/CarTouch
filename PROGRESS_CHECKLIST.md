@@ -17,7 +17,7 @@ in progress, and what's out of scope for code changes entirely
 | # | Item | Files | Summary |
 |---|------|-------|---------|
 | 2  | Task watchdog | `main.cpp` | `esp_task_wdt`, 8s timeout; `esp_task_wdt_reset()` at the top of `loop()`. Version-gated for both Arduino-ESP32 2.x and 3.x |
-| 3  | Hardware-enforced Listen-Only | `can_manager.h/.cpp`, `main.cpp` | `reconfigureMode()` performs a real TWAI driver uninstall/reinstall to switch mode at runtime; wired into the `listen_only` command handler |
+| 3  | Hardware-enforced Listen-Only (global toggle only) | `can_manager.h/.cpp`, `main.cpp` | `reconfigureMode()` performs a real TWAI driver uninstall/reinstall to switch mode at runtime; wired into the `listen_only` command handler. **Not yet wired into Learn Mode entry** (`LearnEngine::beginLearning`/`startBaselineCapture`, called from `webserver.cpp`'s `learn_start` and the TFT Learn Wizard) — see `CarTouch_SPEC.md` §3.3 and the matching entry in `CHANGELOG.md`'s known-issues list. Learn Mode's safety still rests on the code-level guarantee only (`LearnEngine` never calls `sendMessage` — verified, see below) |
 | 4  | Non-blocking OBD-II | `obd2_reader.h/.cpp`, `main.cpp` | Rewritten as a state machine; zero `delay()` on the main path |
 | 6  | Motorola/Intel endianness | `vehicle_db.h/.cpp` | Real bit-mapping for both signal byte orders; verified with an independent simulation |
 | 7  | DBC vehicle list | `vehicle_db.h/.cpp` | 4 -> 38 vehicles wired (of 57 bundled files); omissions documented with reasons |
@@ -54,6 +54,7 @@ in progress, and what's out of scope for code changes entirely
 
 | # | Item | Status |
 |---|------|--------|
+| 3b | Wire `reconfigureMode()` into Learn Mode entry | **Not started** - `beginLearning()`/`startBaselineCapture()` don't call it yet; two options outlined in `CarTouch_SPEC.md` §3.3 |
 | 1  | HTTPS/TLS | **Investigated, deliberately deferred** - see note below |
 | 5  | Rolling code / newer-vehicle security | **Out of scope for code** - requires per-vehicle ECU reverse engineering |
 | 10 | Documenting the DBC write-command limitation | Docs only, no code needed (covered in README/SPEC) |
