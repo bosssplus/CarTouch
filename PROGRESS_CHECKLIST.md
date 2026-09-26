@@ -4,11 +4,14 @@ Tracks the 20-item commercial-readiness checklist: what's done, what's
 in progress, and what's out of scope for code changes entirely
 (hardware, legal certification, field testing).
 
-> These changes have been reviewed manually/logically (item 6 was
-> additionally verified with an independent simulation) but have **not
-> been compiled with the real PlatformIO/ESP-IDF toolchain or tested on
-> hardware**, due to network restrictions in the development
-> environment. Run `pio run` yourself before flashing a real device.
+> **Compile status (updated):** This project has been pushed to GitHub
+> and `.github/workflows/CarTouch-build.yml` has run successfully -
+> i.e. `pio run` and `pio run -t buildfs` compile cleanly with the real
+> PlatformIO/ESP-IDF toolchain. **This confirms compilation only.**
+> Actual hardware behavior (touch calibration, Learn Mode against a
+> real vehicle, `reconfigureMode()` against a real TWAI driver, etc.)
+> has still not been verified on any real ESP32-S3 - only the user,
+> by flashing an actual device, can confirm that part.
 
 ---
 
