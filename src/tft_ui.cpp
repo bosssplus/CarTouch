@@ -116,49 +116,49 @@ void TFT_UI::_lvglDisplayFlush(lv_disp_drv_t* drv, const lv_area_t* area, lv_col
 // ============================================================================
 
 TFT_UI::TFT_UI() {
-    _initialized       = false;
-    _controlCallback     = nullptr;
-    _currentMode          = MODE_ACTIVE;
+    _initialized     = false;
+    _controlCallback = nullptr;
+    _currentMode     = MODE_ACTIVE;
     memset(&_vehicleData, 0, sizeof(VehicleData));
 
-    _learnEngine       = nullptr;
-    _customStore        = nullptr;
-    _profileManager      = nullptr;
-    _vehicleControl       = nullptr;
+    _learnEngine     = nullptr;
+    _customStore     = nullptr;
+    _profileManager  = nullptr;
+    _vehicleControl  = nullptr;
 
-    _passwordScreen           = nullptr;
-    _passwordWarningLabel      = nullptr;
-    _taNewPass                  = nullptr;
-    _taConfirmPass                = nullptr;
-    _passwordErrorLabel            = nullptr;
-    _keyboard                        = nullptr;
+    _passwordScreen        = nullptr;
+    _passwordWarningLabel  = nullptr;
+    _taNewPass             = nullptr;
+    _taConfirmPass         = nullptr;
+    _passwordErrorLabel    = nullptr;
+    _keyboard              = nullptr;
 
     _tabLearn                  = nullptr;
-    _learnMainContainer          = nullptr;
-    _learnVehicleList              = nullptr;
-    _learnActiveVehicleLabel         = nullptr;
-    _learnWizardScreen                 = nullptr;
-    _learnWizardTitle                    = nullptr;
-    _learnWizardStatusLabel                = nullptr;
-    _learnWizardProgressBar                  = nullptr;
-    _learnWizardCandidateList                  = nullptr;
-    _learnWizardActionBtn                        = nullptr;
-    _learnWizardCancelBtn                          = nullptr;
-    _learnLabelDropdown                              = nullptr;
-    _selectedCandidateIndex                            = -1;
+    _learnMainContainer        = nullptr;
+    _learnVehicleList          = nullptr;
+    _learnActiveVehicleLabel   = nullptr;
+    _learnWizardScreen         = nullptr;
+    _learnWizardTitle          = nullptr;
+    _learnWizardStatusLabel    = nullptr;
+    _learnWizardProgressBar    = nullptr;
+    _learnWizardCandidateList  = nullptr;
+    _learnWizardActionBtn      = nullptr;
+    _learnWizardCancelBtn      = nullptr;
+    _learnLabelDropdown        = nullptr;
+    _selectedCandidateIndex    = -1;
 
-    _manualEntryScreen          = nullptr;
-    _taManualCanId                = nullptr;
-    _taManualDataHex                = nullptr;
-    _manualLabelDropdown              = nullptr;
-    _manualExtendedCheckbox             = nullptr;
-    _manualErrorLabel                     = nullptr;
+    _manualEntryScreen       = nullptr;
+    _taManualCanId           = nullptr;
+    _taManualDataHex         = nullptr;
+    _manualLabelDropdown     = nullptr;
+    _manualExtendedCheckbox  = nullptr;
+    _manualErrorLabel        = nullptr;
 
-    _verifyScreen               = nullptr;
-    _verifyInfoLabel              = nullptr;
-    _verifyResultLabel              = nullptr;
-    _verifyProfileId                  = 0;
-    _verifyLabel[0]                     = '\0';
+    _verifyScreen       = nullptr;
+    _verifyInfoLabel    = nullptr;
+    _verifyResultLabel  = nullptr;
+    _verifyProfileId    = 0;
+    _verifyLabel[0]     = '\0';
 
     _selectedProfileForLearning = 0;
 
@@ -172,9 +172,9 @@ TFT_UI::TFT_UI() {
 void TFT_UI::attachLearnModules(LearnEngine* learnEngine, CustomVehicleStore* customStore,
                                 ActiveProfileManager* profileManager, VehicleControl* vehicleControl) {
     _learnEngine     = learnEngine;
-    _customStore      = customStore;
-    _profileManager    = profileManager;
-    _vehicleControl      = vehicleControl;
+    _customStore     = customStore;
+    _profileManager  = profileManager;
+    _vehicleControl  = vehicleControl;
 }
 
 // ============================================================================
@@ -213,16 +213,16 @@ void TFT_UI::begin() {
 
     static lv_disp_drv_t dispDrv;
     lv_disp_drv_init(&dispDrv);
-    dispDrv.hor_res    = TFT_WIDTH;
-    dispDrv.ver_res     = TFT_HEIGHT;
-    dispDrv.flush_cb      = _lvglDisplayFlush;
-    dispDrv.draw_buf        = &_dispBuf;
+    dispDrv.hor_res  = TFT_WIDTH;
+    dispDrv.ver_res  = TFT_HEIGHT;
+    dispDrv.flush_cb = _lvglDisplayFlush;
+    dispDrv.draw_buf = &_dispBuf;
     lv_disp_drv_register(&dispDrv);
 
     static lv_indev_drv_t indevDrv;
     lv_indev_drv_init(&indevDrv);
-    indevDrv.type      = LV_INDEV_TYPE_POINTER;
-    indevDrv.read_cb     = _lvglTouchRead;
+    indevDrv.type    = LV_INDEV_TYPE_POINTER;
+    indevDrv.read_cb = _lvglTouchRead;
     lv_indev_drv_register(&indevDrv);
 
     // Build the UI - base tabs plus the Learn tab and its modals
@@ -380,9 +380,9 @@ void TFT_UI::setControlCallback(UIControlCallback cb) {
 void TFT_UI::_buildTabControl() {
     _tabView = lv_tabview_create(lv_scr_act(), LV_DIR_TOP, 35);
 
-    _tabControl    = lv_tabview_add_tab(_tabView, "کنترل");
-    _tabDashboard   = lv_tabview_add_tab(_tabView, "داشبورد");
-    _tabSettings     = lv_tabview_add_tab(_tabView, "تنظیمات");
+    _tabControl   = lv_tabview_add_tab(_tabView, "کنترل");
+    _tabDashboard = lv_tabview_add_tab(_tabView, "داشبورد");
+    _tabSettings  = lv_tabview_add_tab(_tabView, "تنظیمات");
     // The Learn tab is added in _buildTabLearn(), called after these three.
 
     lv_obj_t* btnLock = lv_btn_create(_tabControl);
@@ -759,7 +759,9 @@ void TFT_UI::_closeLearnWizard() {
     if (_learnEngine) _learnEngine->cancel();
 }
 
-// -- Refresh wizard UI based on state ----------------------------------------
+// ============================================================================
+// Learn Wizard: state refresh
+// ============================================================================
 
 void TFT_UI::_refreshLearnWizardUI() {
     if (!_learnEngine || !_learnWizardActionBtn) return;
@@ -899,15 +901,15 @@ void TFT_UI::_saveLearnedCommand() {
     LearnedCommand cmd;
     strncpy(cmd.label, _learnEngine->getCurrentLabel(), sizeof(cmd.label) - 1);
     strncpy(cmd.displayName, _learnEngine->getCurrentDisplayName(), sizeof(cmd.displayName) - 1);
-    cmd.canId          = candidate.canId;
-    cmd.isExtended       = candidate.isExtended;
-    cmd.length             = candidate.length;
+    cmd.canId         = candidate.canId;
+    cmd.isExtended    = candidate.isExtended;
+    cmd.length        = candidate.length;
     memcpy(cmd.data, candidate.data, candidate.length);
-    cmd.source           = SOURCE_LEARNED;
-    cmd.status              = CMD_UNVERIFIED;  // Always starts unverified (see SPEC section 4.2)
-    cmd.timesObserved         = candidate.seenCountInAction;
-    cmd.failCount                = 0;
-    cmd.createdAt                   = millis();
+    cmd.source        = SOURCE_LEARNED;
+    cmd.status        = CMD_UNVERIFIED;  // Always starts unverified (see SPEC section 4.2)
+    cmd.timesObserved = candidate.seenCountInAction;
+    cmd.failCount     = 0;
+    cmd.createdAt     = millis();
 
     // Added to the profile currently being learned/entered
     // (_selectedProfileForLearning). If no profile exists yet, one must
@@ -1052,13 +1054,13 @@ void TFT_UI::_submitManualEntry() {
     LearnedCommand cmd;
     strncpy(cmd.label, LEARN_LABEL_OPTIONS[selectedIdx], sizeof(cmd.label) - 1);
     strncpy(cmd.displayName, LEARN_LABEL_DISPLAY_NAMES[selectedIdx], sizeof(cmd.displayName) - 1);
-    cmd.canId          = canId;
-    cmd.isExtended       = extended;
-    cmd.source              = SOURCE_MANUAL;
-    cmd.status                 = CMD_UNVERIFIED;  // Manual entries also always start unverified (SPEC section 5)
-    cmd.timesObserved             = 0;
-    cmd.failCount                    = 0;
-    cmd.createdAt                       = millis();
+    cmd.canId         = canId;
+    cmd.isExtended    = extended;
+    cmd.source        = SOURCE_MANUAL;
+    cmd.status        = CMD_UNVERIFIED;  // Manual entries also always start unverified (SPEC section 5)
+    cmd.timesObserved = 0;
+    cmd.failCount     = 0;
+    cmd.createdAt     = millis();
 
     // Parse space-separated hex bytes
     uint8_t len = 0;

@@ -83,13 +83,13 @@ private:
     bool               _initialized;
     UIControlCallback  _controlCallback;
     VehicleData        _vehicleData;
-    DeviceMode          _currentMode;
+    DeviceMode         _currentMode;
 
-    // -- Learn Mode module pointers --------------------------------------------
-    LearnEngine*            _learnEngine;
-    CustomVehicleStore*      _customStore;
-    ActiveProfileManager*    _profileManager;
-    VehicleControl*           _vehicleControl;
+    // -- Learn Mode module pointers ----------------------------------------
+    LearnEngine*           _learnEngine;
+    CustomVehicleStore*    _customStore;
+    ActiveProfileManager*  _profileManager;
+    VehicleControl*        _vehicleControl;
 
     // -- LVGL objects: tabs ------------------------------------------------------
     lv_obj_t* _tabView;
@@ -129,10 +129,10 @@ private:
     lv_obj_t* _learnWizardStatusLabel;
     lv_obj_t* _learnWizardProgressBar;
     lv_obj_t* _learnWizardCandidateList;  // Candidates found after capture
-    lv_obj_t* _learnWizardActionBtn;       // Label changes: Start/Continue/Confirm
+    lv_obj_t* _learnWizardActionBtn;      // Label changes: Start/Continue/Confirm
     lv_obj_t* _learnWizardCancelBtn;
-    lv_obj_t* _learnLabelDropdown;          // Command label picker
-    int        _selectedCandidateIndex;      // -1 = none selected
+    lv_obj_t* _learnLabelDropdown;        // Command label picker
+    int       _selectedCandidateIndex;    // -1 = none selected
 
     // -- Learn tab: manual entry modal -----------------------------------------------
     lv_obj_t* _manualEntryScreen;
@@ -147,8 +147,8 @@ private:
     lv_obj_t* _verifyScreen;
     lv_obj_t* _verifyInfoLabel;
     lv_obj_t* _verifyResultLabel;
-    char       _verifyProfileId;
-    char       _verifyLabel[32];
+    char      _verifyProfileId;
+    char      _verifyLabel[32];
 
     uint8_t _selectedProfileForLearning;  // Profile currently being learned/entered
 
