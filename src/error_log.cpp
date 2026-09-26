@@ -5,9 +5,47 @@
 #include "error_log.h"
 #include <nvs.h>
 #include <stdarg.h>
+#include <ctype.h>
 
 static const char* NVS_NAMESPACE = "CarTouchLog";
 static const char* NVS_KEY       = "counters";
+
+// ============================================================================
+// Case-insensitive substring match
+// ============================================================================
+//
+// Bug fix (found during a code-vs-code review, not caught by the v2.3
+// "verification" pass, which only diffed strings against themselves -
+// it never checked this file's categorization logic against the
+// *exact* text of the call sites that feed it):
+//
+// can_manager.cpp logs messages such as "Bus-off detected..." (capital
+// B, lowercase "off") and "Receive error %d" (capital R). The original
+// categorization below used plain strstr() with only two fixed-case
+// spellings ("bus-off" / "Bus-Off") and ("receive"/"RX"/"Rx"), none of
+// which match that actual text. Every CAN bus-off event and every CAN
+// receive error therefore silently fell into the `else` branch and was
+// counted as a TX error instead - canBusOffEvents and canRxErrors
+// stayed at 0 forever, even though the ring-buffer entries themselves
+// (and their category/severity fields) were always correct.
+//
+// Fix: match case-insensitively instead of relying on every call site
+// using one exact spelling. strcasestr() is not part of standard C and
+// is not guaranteed to be linked on every ESP32 Arduino core build, so
+// this is a small self-contained implementation rather than relying on
+// a possibly-missing libc extension.
+static bool _containsCI(const char* haystack, const char* needle) {
+    if (!haystack || !needle || !*needle) return false;
+    size_t needleLen = strlen(needle);
+    for (const char* p = haystack; *p; p++) {
+        size_t i = 0;
+        while (i < needleLen && p[i] && tolower((unsigned char)p[i]) == tolower((unsigned char)needle[i])) {
+            i++;
+        }
+        if (i == needleLen) return true;
+    }
+    return false;
+}
 
 // ============================================================================
 // Singleton accessor (same pattern as getConfig() in config.cpp)
@@ -134,11 +172,16 @@ void ErrorLog::log(LogCategory category, LogSeverity severity, const char* fmt, 
 
     switch (category) {
         case LOG_CAT_CAN:
-            // Distinguish TX vs RX vs bus-off by message prefix convention
-            // used consistently at all call sites (see can_manager.cpp).
-            if (strstr(entry.message, "bus-off") || strstr(entry.message, "Bus-Off")) {
+            // Distinguish TX vs RX vs bus-off by message content, matched
+            // case-insensitively (_containsCI) so this doesn't silently
+            // break again if a future call site spells "Bus-off"/"RX"/etc.
+            // differently than whatever exact casing this file happens to
+            // check for. See _containsCI's comment above for the bug this
+            // replaced (bus-off/receive events were being miscounted as
+            // TX errors because of a letter-case mismatch).
+            if (_containsCI(entry.message, "bus-off")) {
                 _counters.canBusOffEvents++;
-            } else if (strstr(entry.message, "receive") || strstr(entry.message, "RX") || strstr(entry.message, "Rx")) {
+            } else if (_containsCI(entry.message, "receive") || _containsCI(entry.message, "rx")) {
                 _counters.canRxErrors++;
             } else {
                 _counters.canTxErrors++;
