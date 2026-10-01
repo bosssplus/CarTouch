@@ -387,14 +387,14 @@ bool VehicleDB::_parseSignalLine(const char* line) {
 
 bool VehicleDB::_parseCommentLine(const char* line) {
     (void)line;
-    // CM_ is intentionally unsupported in the MVP. Returning false keeps
+    // CM_ is intentionally unsupported. Returning false keeps
     // the parser's API honest instead of reporting a successful no-op parse.
     return false;
 }
 
 bool VehicleDB::_parseValueLine(const char* line) {
     (void)line;
-    // VAL_ is intentionally unsupported in the MVP. Returning false keeps
+    // VAL_ is intentionally unsupported. Returning false keeps
     // the parser's API honest instead of reporting a successful no-op parse.
     return false;
 }
