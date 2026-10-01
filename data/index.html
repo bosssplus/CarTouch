@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CarTouch - Vehicle Control</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header>
+            <h1>🚗 CarTouch</h1>
+            <span id="connection-status">Disconnected</span>
+        </header>
+        
+        <!-- Tabs -->
+        <div id="tabs">
+            <button class="tab-btn active" data-tab="control">🎮 Control</button>
+            <button class="tab-btn" data-tab="dashboard">📊 Dashboard</button>
+            <button class="tab-btn" data-tab="learn">🎓 Learn</button>
+            <button class="tab-btn" data-tab="settings">⚙ Settings</button>
+        </div>
+        
+        <!-- Control tab -->
+        <div id="tab-control" class="tab-content active">
+            <p id="active-vehicle-banner" class="active-vehicle-banner">Active vehicle: —</p>
+            <div class="control-grid">
+                <button class="ctrl-btn lock" data-cmd="lock">🔒 Lock</button>
+                <button class="ctrl-btn unlock" data-cmd="unlock">🔓 Unlock</button>
+                <button class="ctrl-btn" data-cmd="windows_up">⬆ Windows Up</button>
+                <button class="ctrl-btn" data-cmd="windows_down">⬇ Windows Down</button>
+                <button class="ctrl-btn" data-cmd="sunroof">☀ Sunroof</button>
+                <button class="ctrl-btn" data-cmd="trunk">🔙 Trunk</button>
+                <button class="ctrl-btn" data-cmd="mirror">🪞 Mirrors</button>
+                <button class="ctrl-btn" data-cmd="alarm">🚨 Alarm</button>
+            </div>
+        </div>
+        
+        <!-- Dashboard tab -->
+        <div id="tab-dashboard" class="tab-content">
+            <div id="speed-display">0 <small>km/h</small></div>
+            <div class="dash-grid">
+                <div class="dash-item">
+                    <span class="dash-label">RPM</span>
+                    <span class="dash-value" id="dash-rpm">0</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">🌡 Temperature</span>
+                    <span class="dash-value" id="dash-temp">-- °C</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">🔋 Battery</span>
+                    <span class="dash-value" id="dash-battery">-- V</span>
+                </div>
+                <div class="dash-item">
+                    <span class="dash-label">⛽ Fuel</span>
+                    <span class="dash-value" id="dash-fuel">--%</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- === Learn tab === -->
+        <div id="tab-learn" class="tab-content">
+            <div class="settings-group">
+                <h3>🎓 Learn a Command from the Vehicle</h3>
+                <p style="color:#aaa; font-size:0.85rem;">
+                    Stand near the vehicle and press the real physical button.
+                    CarTouch learns the related CAN traffic. The capture phase
+                    is listen-only; no command is transmitted.
+                </p>
+            </div>
+            
+            <div class="settings-group">
+                <h3>My Vehicle Profiles</h3>
+                <select id="learn-active-profile-select" class="learn-select"></select>
+                <div id="learn-profile-list" class="profile-list"></div>
+                <button class="ctrl-btn" id="btn-new-profile" style="width:100%; min-height:45px; margin-top:8px;">
+                    ➕ Create New Profile
+                </button>
+            </div>
+            
+            <div class="settings-group">
+                <h3>Start Learning</h3>
+                <select id="learn-label-select" class="learn-select"></select>
+                <button class="ctrl-btn" id="btn-learn-start" style="width:100%; min-height:45px; margin-top:8px;">
+                    ▶ Start Learning
+                </button>
+                <button class="ctrl-btn" id="btn-manual-entry-open" style="width:100%; min-height:45px; margin-top:8px; background:#3498db;">
+                    ✍️ Manual CAN ID / Data Entry
+                </button>
+            </div>
+            
+            <div class="settings-group">
+                <h3>Profile Backup</h3>
+                <p style="color:#aaa; font-size:0.85rem;">
+                    Export a profile or import one from another file.
+                    Imported commands are always marked unverified and must
+                    be tested again on this device/vehicle.
+                </p>
+                <button class="ctrl-btn" id="btn-export-profile" style="width:100%; min-height:40px;">⬇ Export Selected Profile</button>
+                <input type="file" id="import-file-input" accept="application/json" style="display:none;">
+                <button class="ctrl-btn" id="btn-import-profile" style="width:100%; min-height:40px; margin-top:8px;">⬆ Import from File</button>
+            </div>
+        </div>
+        
+        <!-- === Learn wizard modal === -->
+        <div id="learn-wizard-modal" class="modal-overlay hidden">
+            <div class="modal-box">
+                <h3>🎓 Learning: <span id="learn-wizard-label-name">-</span></h3>
+                <p id="learn-wizard-status" class="wizard-status-text">...</p>
+                <div class="progress-bar-container hidden" id="learn-wizard-progress-container">
+                    <div class="progress-bar-fill" id="learn-wizard-progress-fill"></div>
+                </div>
+                <div id="learn-wizard-candidates" class="candidate-list hidden"></div>
+                <button class="ctrl-btn" id="btn-wizard-action" style="width:100%; min-height:45px; margin-top:12px;">▶ Start</button>
+                <button class="ctrl-btn" id="btn-wizard-cancel" style="width:100%; min-height:40px; margin-top:8px; background:#555;">❌ Cancel</button>
+            </div>
+        </div>
+        
+        <!-- === Manual entry modal === -->
+        <div id="manual-entry-modal" class="modal-overlay hidden">
+            <div class="modal-box">
+                <h3>✍️ Manual Command Entry</h3>
+                <p style="margin-bottom:6px;">Command:</p>
+                <select id="manual-label-select" class="learn-select"></select>
+                <p style="margin:10px 0 6px;">CAN ID (hex, e.g. 1A0):</p>
+                <input type="text" id="manual-can-id" class="text-input" placeholder="1A0">
+                <label class="checkbox-label">
+                    <input type="checkbox" id="manual-extended"> 29-bit Extended ID
+                </label>
+                <p style="margin:10px 0 6px;">Data bytes (hex, space-separated):</p>
+                <input type="text" id="manual-data-hex" class="text-input" placeholder="01 FF 00 00">
+                <p id="manual-entry-error" class="error-text"></p>
+                <button class="ctrl-btn" id="btn-manual-save" style="width:100%; min-height:45px; margin-top:10px;">✅ Save</button>
+                <button class="ctrl-btn" id="btn-manual-cancel" style="width:100%; min-height:40px; margin-top:8px; background:#555;">❌ Cancel</button>
+            </div>
+        </div>
+        
+        <!-- === Verification modal === -->
+        <div id="verify-modal" class="modal-overlay hidden">
+            <div class="modal-box verify-box">
+                <h3 style="color:#e74c3c;">⚠️ Verify Unverified Command</h3>
+                <p id="verify-info-text" class="wizard-status-text">...</p>
+                <button class="ctrl-btn" id="btn-verify-send" style="width:100%; min-height:45px; margin-top:10px; background:#e74c3c;">
+                    🚨 Send One Test Frame
+                </button>
+                <p id="verify-result-text" class="wizard-status-text"></p>
+                <div style="display:flex; gap:8px; margin-top:8px;">
+                    <button class="ctrl-btn" id="btn-verify-success" style="flex:1; min-height:40px; background:#2ecc71;">✅ Worked Correctly</button>
+                    <button class="ctrl-btn" id="btn-verify-fail" style="flex:1; min-height:40px; background:#555;">❌ Did Not Work</button>
+                </div>
+                <button class="ctrl-btn" id="btn-verify-close" style="width:100%; min-height:40px; margin-top:8px; background:#333;">Close</button>
+            </div>
+        </div>
+        
+        <!-- Settings tab -->
+        <div id="tab-settings" class="tab-content">
+            <div class="settings-group" id="password-warning-group" style="display:none; border: 2px solid #e74c3c;">
+                <h3 style="color:#e74c3c;">⚠️ Default Password Is Still Active</h3>
+                <p>For device security, change the password now.</p>
+            </div>
+            <div class="settings-group">
+                <h3>🔐 Change Login Credentials</h3>
+                <form id="password-form">
+                    <p style="margin-bottom:6px;">New username (optional):</p>
+                    <input type="text" id="new-user" placeholder="Leave blank to keep current username" style="width:100%; padding:8px; margin-bottom:8px; border-radius:6px; border:1px solid #444; background:#0f1a30; color:#eee;">
+                    <p style="margin-bottom:6px;">New password (minimum 8 characters):</p>
+                    <input type="password" id="new-pass" required minlength="8" style="width:100%; padding:8px; margin-bottom:8px; border-radius:6px; border:1px solid #444; background:#0f1a30; color:#eee;">
+                    <p style="margin-bottom:6px;">Confirm new password:</p>
+                    <input type="password" id="confirm-pass" required minlength="8" style="width:100%; padding:8px; margin-bottom:10px; border-radius:6px; border:1px solid #444; background:#0f1a30; color:#eee;">
+                    <button type="submit" class="ctrl-btn" style="width:100%; min-height:45px;">Save New Password</button>
+                    <p id="password-form-msg" style="margin-top:8px; font-size:0.85rem;"></p>
+                </form>
+            </div>
+            <div class="settings-group">
+                <h3>🔄 Firmware Update</h3>
+                <a href="/update" class="ctrl-btn" style="display:block; text-align:center; text-decoration:none; padding:12px;">Open Update Page</a>
+            </div>
+            <div class="settings-group">
+                <h3>Device Update & BLE</h3>
+                <p id="firmwareVersion">Firmware: --</p>
+                <p id="bleStatus">BLE: --</p>
+                <p><a href="/update">Firmware / Web Files Update</a></p>
+                <p class="muted">BLE provides local status/control and a protected firmware update GATT service.</p>
+
+                <h3>WiFi</h3>
+                <p id="wifi-info">Mode: Access Point</p>
+                <p id="wifi-ip">IP: 192.168.4.1</p>
+            </div>
+            <div class="settings-group">
+                <h3>CAN Bus</h3>
+                <p id="can-info">Status: ---</p>
+                <p id="can-diagnostics" class="muted">CAN0 RX -- | TX -- | Errors -- | Bus --</p>
+                <p id="can1-diagnostics" class="muted">CAN1 RX -- | TX -- | Errors -- | Bus --</p>
+                <form id="can-config-form">
+                    <h4>CAN0 / TWAI</h4>
+                    <label>TX GPIO <input type="number" id="can-tx-pin" min="0" max="48" required></label>
+                    <label>RX GPIO <input type="number" id="can-rx-pin" min="0" max="48" required></label>
+                    <label>Bitrate
+                        <select id="can-speed">
+                            <option value="100000">100 kbps</option>
+                            <option value="125000">125 kbps</option>
+                            <option value="250000">250 kbps</option>
+                            <option value="500000">500 kbps</option>
+                            <option value="800000">800 kbps</option>
+                            <option value="1000000">1 Mbps</option>
+                        </select>
+                    </label>
+                    <label><input type="checkbox" id="can-listen-only"> Listen-Only mode</label>
+                    <h4>CAN1 / MCP2515 (8 MHz)</h4>
+                    <label>CS GPIO <input type="number" id="can1-cs-pin" min="0" max="48" required></label>
+                    <label>INT GPIO <input type="number" id="can1-int-pin" min="0" max="48" required></label>
+                    <label>Bitrate
+                        <select id="can1-speed">
+                            <option value="100000">100 kbps</option>
+                            <option value="125000">125 kbps</option>
+                            <option value="250000">250 kbps</option>
+                            <option value="500000">500 kbps</option>
+                            <option value="1000000">1 Mbps</option>
+                        </select>
+                    </label>
+                    <label><input type="checkbox" id="can1-listen-only"> Listen-Only mode</label>
+                    <p class="muted">MCP2515 shares the TFT SPI bus: SCLK 12, MOSI 11, MISO 13. Use 3.3V-compatible logic or level shifters; never connect 5V SPI signals directly to ESP32 GPIOs.</p>
+                    <button type="submit" class="ctrl-btn" style="width:100%;min-height:42px;">Save CAN Settings</button>
+                    <p id="can-config-msg" class="muted"></p>
+                </form>
+            </div>
+            <div class="settings-group">
+                <h3>Module Status</h3>
+                <div id="module-status-list"></div>
+            </div>
+            <div class="settings-group">
+                <h3>About</h3>
+                <p>CarTouch</p>
+                <p>ESP32-S3 + CAN Bus + Learn Mode</p>
+            </div>
+        </div>
+        
+        <!-- Notification -->
+        <div id="notification"></div>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
