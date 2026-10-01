@@ -1,0 +1,19 @@
+CarTouch 1.0.0 — Current release notes
+====================================
+
+Implemented in the current source tree:
+- ESP32-S3 CAN control with runtime-configurable CAN TX/RX pins and centralized safety validation.
+- Listen-Only / Normal CAN mode switching.
+- OBD-II polling, diagnostics and DTC support.
+- Built-in DBC profiles plus custom learned/manual profiles.
+- Learn Mode capture and explicit command verification before execution.
+- Authenticated Wi-Fi Web UI, WebSocket control and REST profile management.
+- Web firmware and filesystem OTA.
+- BLE status/control transport and password-protected BLE firmware OTA.
+- TFT/LVGL UI with bounded touch calibration so an unconnected touch panel does not block boot.
+- Live module status for Wi-Fi, Web Server, CAN, OBD-II and Touch on TFT/Web.
+- Single-source firmware version reporting.
+- Power-loss-aware custom-profile persistence with temporary/backup recovery and profile-index rebuild when the derived index is missing or corrupt.
+- DBC Extended CAN ID preservation, including standard bit-31 DBC encoding and bundled vendor/OpenDBC files that store 29-bit IDs without the marker.
+
+Current limitations are documented rather than hidden: the DBC parser handles classic CAN DLC 0..8; some bundled DBCs are supplementary, ADAS/radar, multi-file or oversized and are retained as source data rather than direct profiles; RGB LED GPIOs remain unassigned until physical wiring is known.
