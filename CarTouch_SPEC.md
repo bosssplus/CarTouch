@@ -1,6 +1,6 @@
-# CarTouch — مشخصات فنی فعلی
+# CarTouch — مشخصات فنی
 
-این سند مرجع فنی **وضعیت موجود** پروژه است. متن‌های تاریخی، گزارش باگ‌های قدیمی، شماره‌گذاری release و برنامه‌های مربوط به وضعیت‌های قبلی عمداً در این سند نگهداری نمی‌شوند. اگر رفتاری در این سند با کد واقعی مغایر بود، کد و تست قابل بازتولید باید بررسی و این سند پس از تعیین رفتار واقعی به‌روزرسانی شود.
+این سند مرجع فنی پروژه است. اگر رفتاری در این سند با کد واقعی مغایر بود، کد و تست قابل بازتولید باید بررسی و این سند پس از تعیین رفتار واقعی به‌روزرسانی شود.
 
 ## 1. هدف
 
@@ -69,12 +69,12 @@ Configuration پایدار در NVS نگهداری می‌شود.
 
 - فهرست پروفایل‌های built-in
 - بارگذاری فایل DBC
-- parse پیام‌ها (`BO_`) و سیگنال‌ها (`SG_`)؛ `CM_` و `VAL_` در MVP تفسیر نمی‌شوند
+- parse پیام‌ها (`BO_`) و سیگنال‌ها (`SG_`)؛ `CM_` و `VAL_` تفسیر نمی‌شوند
 - پیدا کردن پیام/سیگنال
 - استخراج و encode مقدار سیگنال
 - نگهداری سقف تعداد پیام‌ها
 
-هر فایل DBC یک منبع مستقل است؛ merge خودکار چند DBC در یک profile در معماری فعلی وجود ندارد.
+هر فایل DBC یک منبع مستقل است؛ merge خودکار چند DBC در یک profile در معماری پروژه پشتیبانی نمی‌شود.
 
 ### `obd2_reader.cpp/.h`
 
@@ -289,20 +289,20 @@ OBD polling اصلی باید غیرمسدودکننده باشد.
 
 PIDهای استاندارد باید با طول پاسخ و پشتیبانی ECU بررسی شوند و در نبود داده‌ی معتبر مقدار ساختگی تولید نشود.
 
-ولتاژ نمایش‌داده‌شده از OBD PID `0x42` است، نه ADC مستقیم باتری. فقط مقادیر ۶ تا ۳۶ ولت معتبرند؛ timeout، شکست درخواست یا مقدار خارج از محدوده UI را به `N/A` می‌برد. اندازه‌گیری مستقل ولتاژ/درصد شارژ نیازمند ورودی سنسور و کالیبراسیون سخت‌افزاری است و در نسخه‌ی فعلی فعال نیست.
+ولتاژ نمایش‌داده‌شده از OBD PID `0x42` است، نه ADC مستقیم باتری. فقط مقادیر ۶ تا ۳۶ ولت معتبرند؛ timeout، شکست درخواست یا مقدار خارج از محدوده UI را به `N/A` می‌برد. اندازه‌گیری مستقل ولتاژ/درصد شارژ نیازمند ورودی سنسور و کالیبراسیون سخت‌افزاری است و پشتیبانی نمی‌شود.
 
 خواندن DTC و پاک‌کردن DTC عملیات حساس هستند و باید جدا از polling عادی و با authorization مناسب انجام شوند.
 
 ## 7. DBC
 
-parser فعلی:
+parser:
 
 - پیام‌های `BO_`
 - سیگنال‌های `SG_` با indentationهای متداول DBC
 
-را در حد grammar مورد استفاده‌ی پروژه پردازش می‌کند و سیگنال‌های هر پیام را به‌صورت پویا نگهداری می‌کند. `CM_` و `VAL_` در MVP تفسیر نمی‌شوند و parser آن‌ها را به‌عنوان داده‌ی قابل استفاده ثبت نمی‌کند.
+را در حد grammar مورد استفاده‌ی پروژه پردازش می‌کند و سیگنال‌های هر پیام را به‌صورت پویا نگهداری می‌کند. `CM_` و `VAL_` تفسیر نمی‌شوند و parser آن‌ها را به‌عنوان داده‌ی قابل استفاده ثبت نمی‌کند.
 
-parser فعلی تا `MAX_DBC_MESSAGES` پیام در هر فایل را نگه می‌دارد و سیگنال‌های هر پیام را به‌صورت پویا ذخیره می‌کند. سقف فعلی برای پروفایل‌های مستقیم منوی خودرو 400 پیام است؛ فایل‌های بزرگ‌تر یا چندمنبعی همچنان نیازمند معماری چندفایلی/ذخیره‌سازی گسترده‌تر هستند.
+parser تا `MAX_DBC_MESSAGES` پیام در هر فایل را نگه می‌دارد و سیگنال‌های هر پیام را به‌صورت پویا ذخیره می‌کند. سقف برای پروفایل‌های مستقیم منوی خودرو 400 پیام است؛ فایل‌های بزرگ‌تر یا چندمنبعی همچنان نیازمند معماری چندفایلی/ذخیره‌سازی گسترده‌تر هستند.
 
 Intel و Motorola باید با mapping بیت صحیح پردازش شوند. تغییر در این قسمت بدون test vector خطرناک است.
 
@@ -348,7 +348,7 @@ Intel و Motorola باید با mapping بیت صحیح پردازش شوند. �
 - OTA بدون authentication ممنوع باشد.
 - پیام WebSocket قبل از dispatch اعتبارسنجی شود.
 
-HTTPS در معماری فعلی وجود ندارد و نباید مستندات خلاف آن ادعا کنند.
+HTTPS پشتیبانی نمی‌شود و مستندات نباید خلاف آن ادعا کنند.
 
 ## 10. OTA و filesystem
 
@@ -382,8 +382,6 @@ Workflow اصلی باید حداقل این مراحل را اجرا کند:
 7. بررسی اندازه‌ی `spiffs.bin` در برابر پارتیشن واقعی
 8. artifact upload
 
-CI نباید گزارش قدیمی، آدرس کرش قدیمی یا workaround مخصوص یک failure تاریخی داشته باشد.
-
 هر خطای build باید باعث شکست workflow شود.
 
 ## 12. قراردادهای ایمنی
@@ -400,25 +398,9 @@ CI نباید گزارش قدیمی، آدرس کرش قدیمی یا workaround
 
 هیچ refactor زیبایی‌شناختی نباید این guardها را حذف یا دور بزند.
 
-## 13. قرارداد مستندات
+## 13. تست‌های خودکار و محدودیت اعتبارسنجی
 
-مستندات فقط باید:
-
-- رفتار فعلی
-- محدودیت فعلی
-- نحوه‌ی build/run
-- معماری فعلی
-- roadmap فعلی
-
-را توضیح دهند.
-
-گزارش releaseهای قدیمی، «bug fixed»های تاریخی، handoffهای موقتی و checklistهای نشست‌های قبلی در repository نگهداری نمی‌شوند.
-
-اگر محدودیتی دیگر وجود ندارد، نباید در README به‌عنوان محدودیت فعلی باقی بماند.
-
-## 14. تست‌های خودکار و محدودیت اعتبارسنجی
-
-تست native فعلی منطق مستقل از سخت‌افزار را پوشش می‌دهد، از جمله:
+تست native منطق مستقل از سخت‌افزار را پوشش می‌دهد، از جمله:
 
 - Listen-Only و CAN TX admission guard
 - timerهای wrap-safe
@@ -439,38 +421,25 @@ CI نباید گزارش قدیمی، آدرس کرش قدیمی یا workaround
 
 تست روی میز باید پیش از اتصال به CAN زنده انجام شود.
 
+## 14. قراردادهای یکپارچگی runtime
 
+- مسیر فایل‌های DBC داخلی با فایل‌های موجود در `data/dbc/` یکسان است.
+- انتخاب پین CAN در زمان اجرا، پین‌های ثابت پروژه و محدوده‌ی GPIO مربوط به Octal Flash/PSRAM ماژول ESP32-S3 N16R8 را پیش از نصب TWAI رد می‌کند.
+- وضعیت ماژول‌های Wi-Fi، Web Server، CAN، OBD-II، Touch، Display، BLE و Storage روی TFT و از طریق Web API/WebSocket احراز‌شده در دسترس است.
+- شمارنده‌های CAN diagnostics و وضعیت bus هر ثانیه برای کلاینت‌های WebSocket احراز‌شده broadcast می‌شود.
+- جایگزینی JSON پروفایل سفارشی با فایل‌های journal موقت/پشتیبان انجام می‌شود و هنگام راه‌اندازی بازیابی دارد.
+- متن رابط وب برای اپراتور فقط انگلیسی است.
+- نسخه‌ی firmware فقط یک منبع دارد: `CAR_TOUCH_FIRMWARE_VERSION`.
 
-## 15. Current runtime integrity contracts
+## 15. پیکربندی CAN در زمان اجرا
 
-- Built-in DBC paths match files physically present under `data/dbc/`.
-- Runtime CAN pin selection rejects fixed project pins and the ESP32-S3 N16R8 Octal flash/PSRAM GPIO range before TWAI installation.
-- Module status covers Wi-Fi, Web Server, CAN, OBD-II, Touch, Display, BLE and Storage and is exposed through TFT and authenticated Web API/WebSocket.
-- CAN diagnostics counters and bus state are broadcast to authenticated WebSocket clients once per second.
-- Custom-profile JSON replacement uses temporary/backup journal files with startup recovery.
-- Operator-facing Web UI text is English-only.
-- Firmware version has one source of truth: `CAR_TOUCH_FIRMWARE_VERSION`.
+صفحه‌ی Settings در Web UI (پس از احراز هویت) پین‌های TX/RX، bitrate و حالت Listen-Only را در NVS ذخیره می‌کند. پس از ذخیره‌ی موفق دستگاه reboot می‌شود تا درایور TWAI فقط یک بار و با پیکربندی اعتبارسنجی‌شده نصب شود. اعتبارسنجی GPIO پین‌های سخت‌افزار پروژه، پین‌های Octal Flash/PSRAM در ESP32-S3 N16R8 و سایر پین‌های رزروشده یا حساس به strapping را رد می‌کند. bitrateهای classic CAN پشتیبانی‌شده: 100، 125، 250، 500، 800 و 1000 kbps.
 
-## 16. Preserved capabilities and explicit limitations
+## 16. Dual CAN
 
-The 1.0.0 corrections preserve CAN, OBD-II, DBC, Learn Mode, custom profiles, verification, TFT, Web, Wi-Fi, BLE, OTA, sleep/wake, error logging and runtime CAN pin configuration. Genuine architecture limits are documented instead of being hidden by deleting features.
-
-
-## Runtime CAN configuration
-
-The authenticated Web Settings page can persist CAN TX/RX GPIOs, CAN bitrate, and Listen-Only mode in NVS. The device reboots after a successful save so the TWAI driver is installed only once with the validated configuration. GPIO validation rejects project peripherals, ESP32-S3 N16R8 Octal Flash/PSRAM pins, and other reserved/strapping-sensitive pins. Supported classic-CAN bitrates are 100, 125, 250, 500, 800, and 1000 kbps.
-
-## Dual CAN integration
-
-- `CANService` routes existing application calls to CAN0/TWAI for compatibility and exposes explicit CAN1 selection; failure to initialize MCP2515 does not stop CAN0.
-- CAN1 uses MCP2515 with an 8 MHz oscillator, shared TFT/Touch SPI (SCLK 12, MOSI 11, MISO 13), default CS GPIO15 and INT GPIO16, plus per-bus bitrate, Listen-Only, counters, status, diagnostics and bus-off recovery.
-- CAN1 defaults to Listen-Only. Existing OBD-II, Learn Mode, wake detection and vehicle-control traffic remains on CAN0. Use CAN1 transmission only through an explicit CAN1 service call and controlled bench testing.
-- Authenticated Web Settings persists both interfaces, validates GPIO conflicts and requests reboot before applying changes. New fields are appended to the NVS blob; a legacy-size configuration receives CAN1 safe defaults.
-- The MCP2515 driver accepts 100, 125, 250, 500 and 1000 kbps with an 8 MHz oscillator. Per-ID hardware filter configuration and CAN log/replay are not exposed in this iteration.
-- Physical bus, interrupt polarity, crystal frequency and transceiver logic-level behavior still require confirmation on the actual module. ESP32-S3 GPIOs are not 5V tolerant; use level shifting when the MCP2515/TJA1050 board exposes 5V SPI/INT signals or the TJA1051 RXD is not 3.3V compatible.
-
-## Phase 2 hardware boundaries
-
-- Runtime pin configuration for optional peripherals beyond CAN0/CAN1 is not implemented; each new device still needs board-specific conflict validation and restart-to-apply behavior.
-- Independent battery voltage and percentage are not implemented. They require a documented sensor/divider input, calibration, and chemistry-aware percentage mapping; the present value is only ECU-reported OBD PID `0x42`.
-- Display initialization cannot prove physical panel connectivity on the current TFT interface. Hardware presence and recovery behavior require board-level testing; UI failure must remain isolated from Web/CAN services.
+- `CANService` فراخوانی‌های موجود برنامه را برای سازگاری به CAN0/TWAI هدایت می‌کند و انتخاب صریح CAN1 را فراهم می‌کند؛ شکست راه‌اندازی MCP2515 مانع کار CAN0 نمی‌شود.
+- CAN1 از MCP2515 با نوسان‌ساز 8 MHz و SPI مشترک با TFT/Touch (SCLK 12، MOSI 11، MISO 13) استفاده می‌کند. CS پیش‌فرض GPIO15 و INT پیش‌فرض GPIO16 است. هر باس bitrate، Listen-Only، شمارنده‌ها، وضعیت، diagnostics و bus-off recovery مستقل دارد.
+- CAN1 به‌صورت پیش‌فرض Listen-Only است. OBD-II، Learn Mode، wake detection و فرمان‌های خودرو روی CAN0 می‌مانند. ارسال روی CAN1 فقط از فراخوانی صریح CAN1 service و در تست کنترل‌شده روی میز انجام شود.
+- Settings احراز‌شده‌ی Web هر دو رابط را ذخیره می‌کند، تداخل GPIO را بررسی می‌کند و پیش از اعمال تغییر، reboot درخواست می‌کند. فیلدهای جدید به انتهای blob در NVS اضافه شده‌اند و پیکربندی با اندازه‌ی قدیمی، مقادیر امن پیش‌فرض CAN1 را می‌گیرد.
+- درایور MCP2515 با نوسان‌ساز 8 MHz فقط bitrateهای 100، 125، 250، 500 و 1000 kbps را می‌پذیرد. فیلتر سخت‌افزاری per-ID و CAN log/replay ارائه نمی‌شود.
+- باس فیزیکی، پلاریته‌ی interrupt، فرکانس کریستال و سطح منطقی ترنسیور باید روی ماژول واقعی تأیید شوند. GPIOهای ESP32-S3 مقاوم در برابر 5V نیستند؛ اگر برد MCP2515/TJA1050 سیگنال‌های SPI/INT با سطح 5V دارد یا RXD ترنسیور TJA1051 با 3.3V سازگار نیست، از level shifter استفاده کنید.
