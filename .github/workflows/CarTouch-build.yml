@@ -1,0 +1,137 @@
+name: Build Firmware
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (esp32-s3-devkitc-1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: |
+          for attempt in 1 2 3; do
+            if pip install --retries 10 --timeout 60 "platformio>=6.1,<7"; then
+              exit 0
+            fi
+            echo "::warning::PlatformIO installation failed (attempt $attempt/3); retrying in 20s"
+            sleep 20
+          done
+          echo "::error::PlatformIO installation failed after 3 attempts"
+          exit 1
+
+      - name: Build firmware
+        run: pio run -e esp32-s3-devkitc-1
+
+      - name: Validate SPIFFS path lengths
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path("data")
+          bad = []
+          for path in root.rglob("*"):
+              if path.is_file():
+                  rel = "/" + path.relative_to(root).as_posix()
+                  # SPIFFS default maximum path/filename length is 32 bytes
+                  # including the terminating NUL, so 31 visible characters.
+                  if len(rel) > 31:
+                      bad.append(f"{len(rel)}: {rel}")
+          if bad:
+              raise SystemExit("SPIFFS path(s) exceed the 31-character visible limit:\n" + "\n".join(bad))
+          print(f"SPIFFS path-length check passed for {sum(1 for p in root.rglob('*') if p.is_file())} files")
+          PY
+
+      - name: Validate built-in DBC references and operator UI language
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          source = Path("src/vehicle_db.cpp").read_text(encoding="utf-8")
+          refs = set(re.findall(r'"(/dbc/[^" ]+\.dbc)"', source))
+          missing = sorted(ref for ref in refs if not Path("data" + ref).is_file())
+          if missing:
+              raise SystemExit("Missing DBC file(s):\n" + "\n".join(missing))
+          print(f"DBC reference check passed for {len(refs)} built-in profiles")
+
+          for rel in ("data/index.html", "data/app.js", "src/webserver.cpp", "src/tft_ui.cpp"):
+              text = Path(rel).read_text(encoding="utf-8")
+              if any("\u0600" <= ch <= "\u06ff" for ch in text):
+                  raise SystemExit(f"Operator-facing UI source contains Persian/Arabic text: {rel}")
+          print("Operator UI language check passed")
+          PY
+
+      - name: Build filesystem image
+        run: pio run -e esp32-s3-devkitc-1 -t buildfs
+
+      - name: Static analysis
+        run: pio check -e esp32-s3-devkitc-1 --skip-packages
+
+      - name: Native unit tests
+        run: pio test -e native
+
+      - name: Validate generated SPIFFS image fits partition
+        run: |
+          python3 - <<'PY'
+          import csv
+          from pathlib import Path
+          partition = Path("cartouch_16MB.csv")
+          spiffs_size = None
+          with partition.open(newline="") as f:
+              for row in csv.reader(f):
+                  if not row or row[0].strip().startswith("#") or row[0].strip() == "Name":
+                      continue
+                  if row[0].strip() == "spiffs":
+                      raw = row[4].strip()
+                      spiffs_size = int(raw, 0)
+                      break
+          if spiffs_size is None:
+              raise SystemExit("spiffs partition not found")
+          image = Path(".pio/build/esp32-s3-devkitc-1/spiffs.bin")
+          if not image.is_file():
+              raise SystemExit(f"SPIFFS image not found: {image}")
+          actual = image.stat().st_size
+          print(f"SPIFFS partition: {spiffs_size} bytes; generated image: {actual} bytes")
+          if actual > spiffs_size:
+              raise SystemExit("Generated SPIFFS image exceeds the partition")
+          PY
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cartouch-firmware
+          path: |
+            .pio/build/esp32-s3-devkitc-1/*.bin
+            .pio/build/esp32-s3-devkitc-1/firmware.elf
+            .pio/build/esp32-s3-devkitc-1/spiffs.bin
+          if-no-files-found: error
+          retention-days: 30
