@@ -11,6 +11,7 @@
 #include "ct_json_validation.h"
 #include "ct_battery.h"
 #include "ct_can_config.h"
+#include "ct_storage_guard.h"
 #include "can_service.h"
 
 void setUp(void) {}
@@ -116,6 +117,19 @@ void test_mcp2515_supported_bitrates(void) {
     TEST_ASSERT_TRUE(ctMcp2515BitrateValid(1000000));
     TEST_ASSERT_FALSE(ctMcp2515BitrateValid(800000));
     TEST_ASSERT_FALSE(ctMcp2515BitrateValid(0));
+}
+void test_partition_layout_must_fit_detected_flash(void) {
+    TEST_ASSERT_TRUE(ctPartitionFitsFlash(16u * 1024u * 1024u, 16u * 1024u * 1024u));
+    TEST_ASSERT_FALSE(ctPartitionFitsFlash(8u * 1024u * 1024u, 16u * 1024u * 1024u));
+    TEST_ASSERT_FALSE(ctPartitionFitsFlash(4u * 1024u * 1024u, 16u * 1024u * 1024u));
+    TEST_ASSERT_FALSE(ctPartitionFitsFlash(16u * 1024u * 1024u, 0u));
+    TEST_ASSERT_FALSE(ctPartitionFitsFlash(0u, 16u * 1024u * 1024u));
+}
+void test_filesystem_ota_requires_mounted_empty_user_storage(void) {
+    TEST_ASSERT_TRUE(ctFilesystemOtaAllowed(true, false));
+    TEST_ASSERT_FALSE(ctFilesystemOtaAllowed(false, false));
+    TEST_ASSERT_FALSE(ctFilesystemOtaAllowed(true, true));
+    TEST_ASSERT_FALSE(ctFilesystemOtaAllowed(false, true));
 }
 void test_can_service_initializes_each_bus_independently(void) {
     MockCanInterface can0;
@@ -279,6 +293,10 @@ void test_dbc_extended_id_decode(void) {
     TEST_ASSERT_EQUAL_HEX32(0x123, id);
     TEST_ASSERT_TRUE(extended);
 
+    TEST_ASSERT_TRUE(ctDecodeDbcCanId(0x80000000UL, id, extended));
+    TEST_ASSERT_EQUAL_HEX32(0x00000000UL, id);
+    TEST_ASSERT_TRUE(extended);
+
     // Bundled GM vendor/OpenDBC files contain raw 29-bit IDs without the
     // DBC bit-31 marker; these must still become Extended CAN frames.
     TEST_ASSERT_TRUE(ctDecodeDbcCanId(0x10630000UL, id, extended));
@@ -337,6 +355,8 @@ int main(int, char**) {
     RUN_TEST(test_can_frame_identity_includes_format);
     RUN_TEST(test_can_bus_pin_conflicts_are_rejected);
     RUN_TEST(test_mcp2515_supported_bitrates);
+    RUN_TEST(test_partition_layout_must_fit_detected_flash);
+    RUN_TEST(test_filesystem_ota_requires_mounted_empty_user_storage);
     RUN_TEST(test_can_service_initializes_each_bus_independently);
     RUN_TEST(test_can_service_routes_legacy_calls_to_can0);
     RUN_TEST(test_bounded_index_parser_rejects_wraparound);

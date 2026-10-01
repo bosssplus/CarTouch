@@ -43,9 +43,11 @@ static TFT_eSPI* pTft = &tft;
 // relies on this to reach the actual object.
 static TFT_UI* pThisUI = nullptr;
 
+#ifndef CARTOUCH_HEADLESS
 lv_disp_draw_buf_t TFT_UI::_dispBuf;
 lv_color_t          TFT_UI::_buf1[LVGL_BUF_SIZE];
 lv_color_t          TFT_UI::_buf2[LVGL_BUF_SIZE];
+#endif
 
 // ○○○○○○○○○○○○○○○○○○○○○○○○○○○○○○
 // ○○○○○○○○○○ Touch input
@@ -196,6 +198,12 @@ void TFT_UI::attachLearnModules(LearnEngine* learnEngine, CustomVehicleStore* cu
 // ○○○○○○○○○○○○○○○○○○○○○○○○○○○○○○
 
 void TFT_UI::begin() {
+#ifdef CARTOUCH_HEADLESS
+    _initialized = false;
+    _touchAvailable = false;
+    Serial.println("[TFT] Headless build: display initialization skipped");
+    return;
+#else
     Serial.println("[TFT] Initializing display...");
 
     tft.begin();
@@ -253,6 +261,7 @@ void TFT_UI::begin() {
 
     _initialized = true;
     Serial.println("[TFT] Display initialized successfully");
+#endif
 }
 
 // ○○○○○○○○○○○○○○○○○○○○○○○○○○○○○○
@@ -1678,6 +1687,8 @@ void TFT_UI::setWiFiStatus(bool connected) {
 // ○○○○○○○○○○○○○○○○○○○○○○○○○○○○○○
 
 void TFT_UI::setTheme(ThemeMode mode) {
+    if (!_initialized) return;
+
     lv_color_t bgColor;
     lv_color_t fgColor;
 
@@ -1746,6 +1757,7 @@ void TFT_UI::_renderNotification(const char* message) {
 
 void TFT_UI::setDeviceMode(DeviceMode mode) {
     _currentMode = mode;
+    if (!_initialized) return;
 
     switch (mode) {
         case MODE_SLEEP:
