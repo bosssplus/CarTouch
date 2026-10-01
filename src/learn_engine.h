@@ -1,0 +1,207 @@
+/**
+ * learn_engine.h - Command-learning engine, driven from live CAN Bus traffic
+ *
+ * See CarTouch_SPEC.md.
+ *
+ * !!! STRICT, NON-NEGOTIABLE SAFETY RULE !!!
+ * This class must NEVER, under any circumstances, call sendMessage on
+ * CANManager. Everything this class does is read/listen
+ * (receiveMessageNonBlocking) only. If this file is modified in the
+ * future, this rule must be preserved - violating it means sending an
+ * unknown/untested command onto a real vehicle's live bus, which can
+ * affect safety-critical systems (brakes, airbags, steering).
+ *
+ * Hardware-level guarantee:
+ * beginLearning() now forces the TWAI driver into a real
+ * TWAI_MODE_LISTEN_ONLY via CANManager::reconfigureMode(true) before
+ * any capture window opens, and cancel() restores whatever mode was
+ * active before learning started. cancel() is called on save success
+ * and on explicit cancel (see webserver.cpp / tft_ui.cpp) - but
+ * deliberately NOT on save failure (e.g. no profile selected, storage
+ * full), so the user can pick a different candidate/profile and retry
+ * without recapturing. This is still safe either way: staying in
+ * forced hardware Listen-Only for longer than strictly necessary is
+ * the safe direction, never the unsafe one. startBaselineCapture() and confirmReadyForAction() each
+ * re-check CANManager::isListenOnlyActive() before opening their
+ * capture window and refuse (LEARN_ERROR) if the driver isn't
+ * actually in listen-only - so a hardware-level guarantee now backs
+ * this up, not just review of this file. The uninstall/reinstall this
+ * requires is slow (hundreds of ms); this is accepted because
+ * beginLearning() runs before baseline capture starts (which itself
+ * takes seconds), so the delay lands before any time-sensitive window
+ * rather than inside one (see CarTouch_SPEC.md). Even so,
+ * this file must still never call sendMessage() itself - the two
+ * guarantees are independent layers, not a replacement for each
+ * other.
+ *
+ * Algorithm (summary; full detail in CarTouch_SPEC.md):
+ *   1. IDLE -> starts when the user picks a command label
+ *   2. BASELINE_CAPTURE: a few seconds of background traffic (before
+ *      the button is pressed) recorded into a <canId, format, lastData, count> table
+ *   3. WAITING_ACTION: the user is told to press the physical button
+ *   4. ACTION_CAPTURE: a few seconds of new traffic captured and
+ *      diffed against the baseline
+ *   5. CANDIDATES_READY: results (up to CANDIDATE_MAX) are ready for
+ *      the user to review and pick manually
+ *   6. The user picks one and it's saved (outside this class, in
+ *      CustomVehicleStore - this class only produces candidates)
+ */
+
+#ifndef LEARN_ENGINE_H
+#define LEARN_ENGINE_H
+
+#include <Arduino.h>
+#include "config.h"
+#include "can_manager.h"
+
+// ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+// □□□□□□□□□□ State machine states
+// ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+enum LearnModeState : uint8_t {
+    LEARN_IDLE              = 0,
+    LEARN_BASELINE_CAPTURE  = 1,
+    LEARN_WAITING_ACTION    = 2,
+    LEARN_ACTION_CAPTURE    = 3,
+    LEARN_CANDIDATES_READY  = 4,
+    LEARN_ERROR             = 5
+};
+
+// ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+// □□□□□□□□□□ A baseline table entry
+// ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+struct BaselineEntry {
+    uint32_t canId       = 0;
+    bool      isExtended = false;
+    uint8_t   lastData[8]   = {0};
+    uint8_t    length          = 0;
+    uint16_t    seenCount        = 0;           // Times seen during the baseline window
+    bool         valid              = false;
+};
+
+// ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+// □□□□□□□□□□ A result candidate
+// ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
+
+struct LearnCandidate {
+    uint32_t canId               = 0;
+    uint8_t   data[8]               = {0};
+    uint8_t length     = 0;
+    bool    isExtended = false;
+    bool         isNewMessage                = false;      // true if this frame ID/format wasn't in the baseline
+    uint16_t      seenCountInAction             = 0;       // Times seen during the action window
+    uint16_t       seenCountInBaseline             = 0;    // For ranking: the more it appeared in baseline, the more likely it's noise/periodic
+};
+
+class LearnEngine {
+public:
+    LearnEngine(CanInterface& canInterface);
+
+    /**
+     * Starts the learning process for a given label. Resets internal
+     * state, and forces the TWAI driver into a real hardware
+     * listen-only mode via CANManager::reconfigureMode(true) (SPEC
+     * section 3.3) - remembering whatever mode was active before, so
+     * cancel() can restore it. Actual capture begins with
+     * startBaselineCapture().
+     *
+     * If the forced mode switch fails, the state is set to
+     * LEARN_ERROR instead (checkable via getState()) and
+     * startBaselineCapture() will refuse to start a capture window.
+     */
+    void beginLearning(const char* label, const char* displayName, uint8_t targetProfileId = 255);
+
+    /**
+     * Starts baseline capture. Assumes the user has not yet pressed the
+     * vehicle's physical button. Non-blocking - update() must be called
+     * repeatedly from the main loop for the timing to advance.
+     */
+    void startBaselineCapture();
+
+    /**
+     * Must be called every main loop() iteration (like the project's
+     * other update() methods, e.g. tftUI.update()). This method:
+     *   - In BASELINE_CAPTURE / ACTION_CAPTURE: reads new CAN messages
+     *     from CANManager (non-blocking) and updates the table
+     *   - Automatically advances to the next state once the window elapses
+     */
+    void update();
+
+    /**
+     * User has confirmed they're ready to press the physical button.
+     * Starts the ACTION_CAPTURE window (LEARN_ACTION_CAPTURE_MS,
+     * capped at LEARN_ACTION_CAPTURE_MAX_MS).
+     */
+    void confirmReadyForAction();
+
+    /**
+     * Cancels the current learning process entirely, back to IDLE (no
+     * save). Also restores the CAN driver's mode to whatever it was
+     * before beginLearning() forced listen-only (see CarTouch_SPEC.md).
+     * Called on a successful save and on explicit user cancellation -
+     * see webserver.cpp's learn_save/learn_cancel and tft_ui.cpp's
+     * save/close handlers. Deliberately NOT called when a save
+     * attempt fails, so the session stays open for a retry (see the
+     * class-level comment above).
+     */
+    void cancel();
+
+    LearnModeState getState();
+
+    /** Number of ready candidates (only valid when state == LEARN_CANDIDATES_READY). */
+    uint8_t getCandidateCount();
+
+    /**
+     * Retrieves a candidate by index (ranked: brand-new messages
+     * first, then by lowest seenCountInBaseline - i.e. least likely to
+     * be periodic/noise traffic).
+     */
+    bool getCandidate(uint8_t index, LearnCandidate& outCandidate);
+
+    /** The label/display name currently being learned. */
+    const char* getCurrentLabel();
+    const char* getCurrentDisplayName();
+
+    /** Current window's progress percentage (0-100) - for the UI progress bar. */
+    uint8_t getProgressPercent();
+
+    /** Profile and session binding for candidate saves. */
+    uint8_t getTargetProfileId() const { return _targetProfileId; }
+    uint32_t getSessionId() const { return _sessionId; }
+    bool isActiveCaptureState() const { return _state == LEARN_BASELINE_CAPTURE || _state == LEARN_ACTION_CAPTURE; }
+
+private:
+    CanInterface& _can;
+
+    LearnModeState _state;
+    char             _currentLabel[32];
+    char              _currentDisplayName[48];
+
+    uint32_t _phaseStartTime;
+    uint32_t _phaseDurationMs;
+
+    BaselineEntry _baseline[BASELINE_MAX_IDS];
+    uint8_t         _baselineCount;
+    bool            _baselineOverflowed = false;   // more distinct IDs than BASELINE_MAX_IDS were seen
+
+    LearnCandidate _candidates[CANDIDATE_MAX];
+    uint8_t          _candidateCount;
+
+    // -- Hardware listen-only enforcement (see CarTouch_SPEC.md) -----------------
+    bool _forcedListenOnly;          // true if beginLearning() had to switch the driver
+    bool _previousListenOnlyMode;    // cfg->listenOnlyMode as it was before the switch
+    uint8_t _targetProfileId;        // profile bound to this learn session
+    uint32_t _sessionId;             // increments for every new learn session
+
+    /** Finds or adds a baseline table entry. */
+    BaselineEntry* _findOrAddBaseline(uint32_t canId, bool isExtended);
+
+    /** Checks a message received during ACTION_CAPTURE and adds it as a candidate if it differs from the baseline. */
+    void _processActionMessage(const CanMessage& msg);
+
+    /** Ranks candidates by priority (new message > lowest baseline noise). */
+    void _rankCandidates();
+};
+
+#endif    // LEARN_ENGINE_H
