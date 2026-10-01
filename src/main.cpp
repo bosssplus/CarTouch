@@ -390,6 +390,7 @@ void loop() {
         }
     }
 
+#ifndef CARTOUCH_HEADLESS
     // 4b. Touch activity: without this the device went to sleep (screen off,
     // Wi-Fi off) 10 minutes after the last *command* even while the user was
     // actively using the TFT. lv_disp_get_inactive_time() is LVGL's time
@@ -400,6 +401,7 @@ void loop() {
         }
         lastActivityTime = millis();
     }
+#endif
 
     // 5. Auto-sleep check. Deferred while a Learn Mode capture is in
     // progress so the session isn't interrupted.

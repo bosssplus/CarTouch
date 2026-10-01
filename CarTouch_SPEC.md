@@ -4,10 +4,11 @@
 
 ## 1. هدف
 
-CarTouch یک firmware برای ESP32-S3 است که از CAN Bus خودرو داده دریافت می‌کند و در شرایط تأییدشده می‌تواند فرمان‌های کنترلی را ارسال کند. دو رابط اصلی دارد:
+CarTouch یک firmware برای ESP32-S3 است که از CAN Bus خودرو داده دریافت می‌کند و در شرایط تأییدشده می‌تواند فرمان‌های کنترلی را ارسال کند. Web و BLE مستقل از TFT هستند؛ نمایشگر و touch در build headless غیرفعال می‌شوند. دکمه‌های پنج‌جهته و SD در پیاده‌سازی فعلی پشتیبانی نمی‌شوند.
 
-1. TFT لمسی با LVGL.
+1. TFT لمسی با LVGL در build نمایش‌دار.
 2. Web Dashboard روی Wi‑Fi.
+3. BLE برای status و BLE OTA.
 
 طراحی باید در برابر ارسال ناخواسته‌ی CAN محافظه‌کار باشد.
 
@@ -19,7 +20,7 @@ CarTouch یک firmware برای ESP32-S3 است که از CAN Bus خودرو د�
 
 وظایف اصلی:
 
-- ایجاد objectهای بزرگ روی heap.
+- نگهداری objectهای اصلی به‌صورت static؛ PSRAM در صورت وجود برای تخصیص‌های بزرگ در دسترس است.
 - راه‌اندازی watchdog.
 - بارگذاری configuration.
 - راه‌اندازی SPIFFS.
@@ -75,6 +76,7 @@ Configuration پایدار در NVS نگهداری می‌شود.
 - نگهداری سقف تعداد پیام‌ها
 
 هر فایل DBC یک منبع مستقل است؛ merge خودکار چند DBC در یک profile در معماری پروژه پشتیبانی نمی‌شود.
+فهرست خودرو در زمان اجرا فقط profileهایی را نشان می‌دهد که فایل DBC آن‌ها در SPIFFS حاضر است؛ DBCها هنگام انتخاب بارگذاری می‌شوند، نه همگی در RAM.
 
 ### `obd2_reader.cpp/.h`
 
@@ -113,6 +115,7 @@ Configuration پایدار در NVS نگهداری می‌شود.
 - ایجاد/ویرایش/حذف
 
 SPIFFS در این معماری برای فایل‌های JSON پروفایل استفاده می‌شود.
+Storage فعلی SPIFFS-only است؛ SD و abstraction مشترک چندرسانه‌ای پیاده‌سازی نشده‌اند. در صورت mount نشدن SPIFFS، core بدون پاک‌کردن خودکار داده ادامه می‌دهد و قابلیت‌های profile/storage در دسترس نیستند.
 
 ### `learn_engine.cpp/.h`
 
@@ -156,6 +159,8 @@ VehicleControl باید از این manager برای resolve فرمان استف
 - theme
 - notifications
 - power state
+
+پروفایل نمایش‌دار فعلی به ILI9341/XPT2046 و پین‌های ثابت build متکی است؛ driver عمومی برای کنترلرها/رزولوشن‌های دیگر و پیکربندی runtime این پین‌ها وجود ندارد. در build headless هیچ نمایشگر یا touchی initialize نمی‌شود.
 
 منطق CAN و business logic نباید در callbackهای UI تکثیر شود.
 
@@ -352,7 +357,9 @@ HTTPS پشتیبانی نمی‌شود و مستندات نباید خلاف آ�
 
 ## 10. OTA و filesystem
 
-پروژه برای flash شانزده مگابایتی از partition table اختصاصی `cartouch_16MB.csv` استفاده می‌کند.
+پروفایل اصلی N16R8 از `cartouch_16MB.csv` (16 MB flash و 8 MB OPI PSRAM) استفاده می‌کند. پروفایل‌های `esp32-s3-4mb` و `esp32-s3-4mb-psram` از `cartouch_4MB.csv` استفاده می‌کنند؛ دومی برای PSRAM نوع QSPI است.
+
+در buildهای 4 MB فقط Web UI و 10 فایل DBC منتخب regional/imported در image قرار می‌گیرند. منبع کامل DBC در `data/dbc/` باقی می‌ماند و فقط در build 16 MB بسته‌بندی می‌شود. اندازه‌ی firmware فعلی به سقف 1.5 MB هر OTA slot در جدول 4 MB نزدیک است و حاشیه‌ی تغییرات آینده محدود است.
 
 Partition table باید فضای کافی برای:
 
@@ -367,16 +374,18 @@ Partition table باید فضای کافی برای:
 
 در صورت شکست mount، firmware بدون format خودکار boot را ادامه می‌دهد، خطا را ثبت و Storage را `ERROR` اعلام می‌کند؛ عملیات پروفایل سفارشی fail-closed می‌شوند تا از پاک‌شدن داده برای بازیابی موقت جلوگیری شود.
 
-CI پس از ساخت filesystem، اندازه‌ی `spiffs.bin` تولیدشده را مستقیماً با اندازه‌ی پارتیشن `spiffs` در `cartouch_16MB.csv` مقایسه می‌کند تا افزایش DBCها باعث overflow پنهان یا شکست دیرهنگام upload نشود.
+خطای NVS هنگام initialization باعث erase خودکار نمی‌شود: دستگاه با defaultهای RAM بالا می‌آید و تنظیمات تا بازیابی NVS قابل ذخیره نیستند. این رفتار از پاک‌شدن خاموش تنظیمات جلوگیری می‌کند.
+
+CI image کامل و کوچک SPIFFS را می‌سازد و اندازه‌ی خروجی هرکدام را با پارتیشن مربوط مقایسه می‌کند.
 
 ## 11. CI و کیفیت
 
-Workflow اصلی باید حداقل این مراحل را اجرا کند:
+Workflow فعلی این مراحل را اجرا می‌کند:
 
 1. checkout
 2. نصب PlatformIO
-3. firmware build
-4. filesystem build
+3. buildهای N16R8، headless، 4 MB بدون PSRAM و 4 MB با QSPI PSRAM
+4. filesystem کامل و هر دو filesystem کوچک 4 MB
 5. static analysis
 6. اجرای native unit tests با `pio test -e native`
 7. بررسی اندازه‌ی `spiffs.bin` در برابر پارتیشن واقعی
@@ -423,7 +432,7 @@ Workflow اصلی باید حداقل این مراحل را اجرا کند:
 
 ## 14. قراردادهای یکپارچگی runtime
 
-- مسیر فایل‌های DBC داخلی با فایل‌های موجود در `data/dbc/` یکسان است.
+- مسیر فایل‌های DBC داخلی با فایل‌های موجود در `data/dbc/` یکسان است؛ profile فاقد فایل در image کوچک از فهرست runtime حذف می‌شود.
 - انتخاب پین CAN در زمان اجرا، پین‌های ثابت پروژه و محدوده‌ی GPIO مربوط به Octal Flash/PSRAM ماژول ESP32-S3 N16R8 را پیش از نصب TWAI رد می‌کند.
 - وضعیت ماژول‌های Wi-Fi، Web Server، CAN، OBD-II، Touch، Display، BLE و Storage روی TFT و از طریق Web API/WebSocket احراز‌شده در دسترس است.
 - شمارنده‌های CAN diagnostics و وضعیت bus هر ثانیه برای کلاینت‌های WebSocket احراز‌شده broadcast می‌شود.
@@ -433,7 +442,7 @@ Workflow اصلی باید حداقل این مراحل را اجرا کند:
 
 ## 15. پیکربندی CAN در زمان اجرا
 
-صفحه‌ی Settings در Web UI (پس از احراز هویت) پین‌های TX/RX، bitrate و حالت Listen-Only را در NVS ذخیره می‌کند. پس از ذخیره‌ی موفق دستگاه reboot می‌شود تا درایور TWAI فقط یک بار و با پیکربندی اعتبارسنجی‌شده نصب شود. اعتبارسنجی GPIO پین‌های سخت‌افزار پروژه، پین‌های Octal Flash/PSRAM در ESP32-S3 N16R8 و سایر پین‌های رزروشده یا حساس به strapping را رد می‌کند. bitrateهای classic CAN پشتیبانی‌شده: 100، 125، 250، 500، 800 و 1000 kbps.
+صفحه‌ی Settings در Web UI (پس از احراز هویت) پین‌های TX/RX، bitrate و حالت Listen-Only را در NVS ذخیره می‌کند. پس از ذخیره‌ی موفق دستگاه reboot می‌شود تا درایور TWAI فقط یک بار و با پیکربندی اعتبارسنجی‌شده نصب شود. اعتبارسنجی GPIO پین‌های CAN، پین‌های ثابت پروژه، پین‌های Octal Flash/PSRAM در N16R8 و سایر پین‌های رزروشده یا حساس به strapping را رد می‌کند. این قابلیت تنظیم runtime فقط برای CAN است؛ GPIOهای نمایشگر، touch و دکمه‌ها قابل تنظیم نیستند. bitrateهای classic CAN پشتیبانی‌شده: 100، 125، 250، 500، 800 و 1000 kbps.
 
 ## 16. Dual CAN
 

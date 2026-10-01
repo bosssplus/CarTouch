@@ -286,9 +286,13 @@ CAN1 از کریستال 8 MHz روی MCP2515 و SPI مشترک با TFT/Touch �
 **پیش‌نیازها:** Git + [VS Code](https://code.visualstudio.com/) + افزونه‌ی PlatformIO
 
 ```bash
-pio run -e esp32-s3-devkitc-1                 # ساخت با جدول پارتیشن 16MB
-pio run -e esp32-s3-headless                  # ساخت headless بدون init نمایشگر/تاچ
-pio run -e esp32-s3-devkitc-1 -t buildfs      # ساخت filesystem
+pio run -e esp32-s3-devkitc-1                 # N16R8، فلش 16MB و PSRAM نوع OPI
+pio run -e esp32-s3-headless                  # N16R8 بدون init نمایشگر/تاچ
+pio run -e esp32-s3-4mb                       # فلش 4MB بدون PSRAM
+pio run -e esp32-s3-4mb-psram                 # فلش 4MB با PSRAM نوع QSPI
+pio run -e esp32-s3-devkitc-1 -t buildfs      # filesystem کامل 16MB
+pio run -e esp32-s3-4mb -t buildfs            # filesystem کوچک 4MB
+pio run -e esp32-s3-4mb-psram -t buildfs      # همان filesystem برای PSRAM نوع QSPI
 pio run -e esp32-s3-devkitc-1 -t upload       # آپلود firmware
 pio run -e esp32-s3-devkitc-1 -t uploadfs     # آپلود filesystem (وب و DBC)
 pio device monitor                            # مانیتور سریال
@@ -298,10 +302,12 @@ pio device monitor                            # مانیتور سریال
 
 <div class="markdown-alert markdown-alert-warning" dir="rtl">
 <p class="markdown-alert-title">محدودیت پیکربندی حافظه</p>
-<p>تنها جدول پارتیشن فعال پروژه <code>cartouch_16MB.csv</code> است. موفقیت کامپایل، اندازه‌ی واقعی فلش یا وجود PSRAM روی برد را تأیید نمی‌کند. هنگام اجرا، اگر فلش واقعی از انتهای جدول پارتیشن کوچک‌تر باشد، SPIFFS بدون format غیرفعال می‌شود؛ این رفتار به معنی پشتیبانی کامل از برد کوچک‌تر نیست. جدول 4MB فعلی فضای کافی برای مجموعه‌ی کامل فعلی DBC و فایل‌های وب ندارد.</p>
+<p>پروفایل اصلی <code>esp32-s3-devkitc-1</code> از برد N16R8 با فلش 16MB و PSRAM نوع OPI استفاده می‌کند. پروفایل‌های <code>esp32-s3-4mb</code> و <code>esp32-s3-4mb-psram</code> جدول واقعی 4MB و filesystem کوچک‌شده دارند؛ دومی برای PSRAM نوع QSPI است. firmware فعلی در هر دو پروفایل نزدیک به سقف 1.5MB هر OTA slot است، بنابراین تغییرات بزرگ بعدی ممکن است به جدول پارتیشن تازه نیاز داشته باشد.</p>
 </div>
 
-<p>پروفایل <code>esp32-s3-headless</code> نمایشگر، تاچ و بافرهای LVGL را init/رزرو نمی‌کند؛ دسترسی شبکه و BLE مستقل می‌ماند. این پروفایل نیز همان جدول 16MB را استفاده می‌کند و پشتیبانی از دکمه‌های فیزیکی یا SD اضافه نمی‌کند.</p>
+<p>در پروفایل 4MB فقط Web UI و 10 فایل DBC منطقه‌ای/وارداتی منتخب بسته‌بندی می‌شوند؛ مجموعه‌ی کامل 57 فایل در <code>data/dbc</code> دست‌نخورده می‌ماند و برای پروفایل 16MB است. فهرست خودرو در زمان اجرا فقط DBCهای موجود در filesystem را نشان می‌دهد. پروفایل‌های فعلی همچنان SPIFFS-only هستند و درایور عمومی SD، تنظیم پین‌های نمایشگر در زمان اجرا و پشتیبانی از کنترلرهای TFT دیگر هنوز پیاده‌سازی نشده‌اند.</p>
+
+<p>پروفایل <code>esp32-s3-headless</code> نمایشگر، تاچ و بافرهای LVGL را init/رزرو نمی‌کند؛ دسترسی شبکه و BLE مستقل می‌ماند و از جدول 16MB استفاده می‌کند. همه‌ی پروفایل‌های نمایش‌دار فعلی روی پین‌بندی ثابت ILI9341/XPT2046 در <code>platformio.ini</code> تنظیم شده‌اند.</p>
 
 <details>
 <summary><b>بررسی کیفیت (static analysis و تست‌های native)</b></summary>
@@ -309,6 +315,9 @@ pio device monitor                            # مانیتور سریال
 ```bash
 pio check -e esp32-s3-devkitc-1 --skip-packages
 pio test -e native
+pio run -e esp32-s3-4mb
+pio run -e esp32-s3-4mb-psram
+pio run -e esp32-s3-headless
 ```
 
 </details>
@@ -316,7 +325,7 @@ pio test -e native
 <details>
 <summary><b>فلش دستی با esptool</b></summary>
 
-پروژه از جدول پارتیشن اختصاصی <code>cartouch_16MB.csv</code> استفاده می‌کند. فایل <code>cartouch_4MB.csv</code> صرفاً یک طرح آزمایشی است و در حال حاضر build target پشتیبانی‌شده نیست؛ پارتیشن SPIFFS آن برای مجموعه‌ی کامل <code>data/</code> کافی نیست.
+پروفایل اصلی از جدول <code>cartouch_16MB.csv</code> استفاده می‌کند. پروفایل‌های 4MB از <code>cartouch_4MB.csv</code> و filesystem انتخابی ساخته‌شده از Web UI و DBCهای منطقه‌ای استفاده می‌کنند؛ فایل‌های اصلی در <code>data/</code> حذف یا تغییر نمی‌کنند. فضای SPIFFS چهارمگابایتی برای کل مجموعه‌ی DBC کافی نیست.
 
 آدرس فایل‌ها برای جدول 16MB:
 
@@ -336,7 +345,7 @@ pio test -e native
 
 <div class="markdown-alert markdown-alert-note" dir="rtl">
 <p class="markdown-alert-title">Note</p>
-<p>‏CI پس از ساخت filesystem، اندازه‌ی <code>spiffs.bin</code> را با پارتیشن <code>spiffs</code> در <code>cartouch_16MB.csv</code> مقایسه می‌کند تا افزایش DBCها باعث overflow پنهان یا شکست دیرهنگام upload نشود. محتوای <code>data/</code> در زمان build به filesystem دستگاه تبدیل می‌شود.</p>
+<p>‏CI firmwareهای اصلی، headless و 4MB را می‌سازد و imageهای filesystem کامل و کوچک را بررسی می‌کند. محتوای کامل <code>data/</code> فقط در پروفایل 16MB قرار می‌گیرد؛ فایل‌های learned در زمان اجرا در SPIFFS هستند، بنابراین پیش از <code>uploadfs</code> دستی حتماً backup بگیرید.</p>
 </div>
 
 **بیلد خودکار:** workflow در `.github/workflows/CarTouch-build.yml` شامل build فریمویر و filesystem، static analysis، تست‌های native، بررسی اندازه‌ی SPIFFS و آپلود artifact است.

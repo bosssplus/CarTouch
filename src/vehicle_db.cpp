@@ -18,7 +18,7 @@
 VehicleDB::VehicleDB() {
     _messageCount = 0;
     _vehicleCount = 0;
-    _initialized   = false;
+    _initialized = false;
     memset(&_activeVehicle, 0, sizeof(VehicleProfile));
 }
 
@@ -155,7 +155,17 @@ void VehicleDB::begin() {
     // not suitable as a standalone profile for the current single-file
     // DBC architecture.
 
-    _vehicleCount = i;
+    uint8_t availableCount = 0;
+    for (uint8_t index = 0; index < i; ++index) {
+        const VehicleProfile& candidate = _vehicleList[index];
+        if (candidate.dbcFileName[0] != '\0' && !SPIFFS.exists(candidate.dbcFileName)) {
+            Serial.printf("[DB] Hiding unavailable DBC profile: %s\n", candidate.dbcFileName);
+            continue;
+        }
+        if (availableCount != index) _vehicleList[availableCount] = candidate;
+        ++availableCount;
+    }
+    _vehicleCount = availableCount;
     _initialized  = true;
 
     AppConfig* cfg = getConfig();
