@@ -124,11 +124,10 @@ static void applyDefaultConfigValues() {
 bool loadConfig() {
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        err = nvs_flash_init();
+        Serial.printf("[NVS] Init returned %d; preserving stored data and using RAM defaults\n", (int)err);
     }
     if (err != ESP_OK) {
-        Serial.println("[NVS] Init failed - using in-memory defaults");
+        Serial.printf("[NVS] Init failed (%d) - using in-memory defaults; settings will not persist\n", (int)err);
         applyDefaultConfigValues();
         configLoaded = true;
         return true;

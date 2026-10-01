@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   build:
-    name: Build (esp32-s3-devkitc-1)
+    name: Build (ESP32-S3 profiles)
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -50,7 +50,11 @@ jobs:
           exit 1
 
       - name: Build firmware
-        run: pio run -e esp32-s3-devkitc-1
+        run: |
+          pio run -e esp32-s3-devkitc-1
+          pio run -e esp32-s3-headless
+          pio run -e esp32-s3-4mb
+          pio run -e esp32-s3-4mb-psram
 
       - name: Validate SPIFFS path lengths
         run: |
@@ -91,7 +95,10 @@ jobs:
           PY
 
       - name: Build filesystem image
-        run: pio run -e esp32-s3-devkitc-1 -t buildfs
+        run: |
+          pio run -e esp32-s3-devkitc-1 -t buildfs
+          pio run -e esp32-s3-4mb -t buildfs
+          pio run -e esp32-s3-4mb-psram -t buildfs
 
       - name: Static analysis
         run: pio check -e esp32-s3-devkitc-1 --skip-packages
@@ -104,25 +111,27 @@ jobs:
           python3 - <<'PY'
           import csv
           from pathlib import Path
-          partition = Path("cartouch_16MB.csv")
-          spiffs_size = None
-          with partition.open(newline="") as f:
-              for row in csv.reader(f):
-                  if not row or row[0].strip().startswith("#") or row[0].strip() == "Name":
-                      continue
-                  if row[0].strip() == "spiffs":
-                      raw = row[4].strip()
-                      spiffs_size = int(raw, 0)
-                      break
-          if spiffs_size is None:
-              raise SystemExit("spiffs partition not found")
-          image = Path(".pio/build/esp32-s3-devkitc-1/spiffs.bin")
-          if not image.is_file():
+          def spiffs_partition_size(path):
+            with Path(path).open(newline="") as stream:
+              for row in csv.reader(stream):
+                if row and row[0].strip() == "spiffs":
+                  return int(row[4].strip(), 0)
+            raise SystemExit(f"spiffs partition not found in {path}")
+
+          images = (
+            ("cartouch_16MB.csv", ".pio/build/esp32-s3-devkitc-1/spiffs.bin"),
+            ("cartouch_4MB.csv", ".pio/build/esp32-s3-4mb/spiffs.bin"),
+            ("cartouch_4MB.csv", ".pio/build/esp32-s3-4mb-psram/spiffs.bin"),
+          )
+          for partition, image_path in images:
+            expected = spiffs_partition_size(partition)
+            image = Path(image_path)
+            if not image.is_file():
               raise SystemExit(f"SPIFFS image not found: {image}")
-          actual = image.stat().st_size
-          print(f"SPIFFS partition: {spiffs_size} bytes; generated image: {actual} bytes")
-          if actual > spiffs_size:
-              raise SystemExit("Generated SPIFFS image exceeds the partition")
+            actual = image.stat().st_size
+            print(f"{partition}: partition {expected} bytes; image {actual} bytes")
+            if actual > expected:
+              raise SystemExit(f"Generated SPIFFS image exceeds {partition}")
           PY
 
       - name: Upload firmware artifacts
@@ -133,5 +142,10 @@ jobs:
             .pio/build/esp32-s3-devkitc-1/*.bin
             .pio/build/esp32-s3-devkitc-1/firmware.elf
             .pio/build/esp32-s3-devkitc-1/spiffs.bin
+            .pio/build/esp32-s3-headless/firmware.bin
+            .pio/build/esp32-s3-4mb/firmware.bin
+            .pio/build/esp32-s3-4mb/spiffs.bin
+            .pio/build/esp32-s3-4mb-psram/firmware.bin
+            .pio/build/esp32-s3-4mb-psram/spiffs.bin
           if-no-files-found: error
           retention-days: 30
