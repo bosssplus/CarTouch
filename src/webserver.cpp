@@ -13,6 +13,8 @@
 #include "custom_vehicle.h"
 #include "error_log.h"
 #include "ct_verify.h"
+#include "ct_can_config.h"
+#include "ct_storage_guard.h"
 #include <SPIFFS.h>
 #include <esp_random.h>
 #include <Update.h>
@@ -31,6 +33,26 @@ static bool parseHexByteToken(const char* token, uint8_t& value) {
 
 static bool parseHttpProfileIndex(const String& text, uint8_t& index) {
     return ctParseBoundedIndex(text.c_str(), MAX_CUSTOM_VEHICLES, index);
+}
+
+static bool canReplaceFilesystemWithoutCustomProfiles() {
+    const bool filesystemMounted = SPIFFS.totalBytes() != 0;
+    if (!filesystemMounted) return ctFilesystemOtaAllowed(false, false);
+
+    const char* suffixes[] = {".json", ".json.tmp", ".json.bak"};
+    for (uint8_t index = 0; index < MAX_CUSTOM_VEHICLES; ++index) {
+        const String slot = String(index);
+        const String prefixes[] = {
+            String("/custom_vehicles/p") + slot,
+            String("/custom_vehicles/profile_") + slot
+        };
+        for (const String& prefix : prefixes) {
+            for (const char* suffix : suffixes) {
+                if (SPIFFS.exists(prefix + suffix)) return ctFilesystemOtaAllowed(true, true);
+            }
+        }
+    }
+    return ctFilesystemOtaAllowed(true, false);
 }
 
 static bool parseJsonBoundedIndex(JsonVariantConst value, uint8_t limit, uint8_t& index) {
@@ -63,7 +85,7 @@ h3{margin:0 0 10px}.muted{opacity:.75;font-size:.9rem}input[type=file]{width:100
 <div class="card"><h3>Firmware Update</h3><p class="muted">Upload a firmware .bin file. Do not power off the device during the update.</p>
 <input type="file" id="f-fw" accept=".bin"><button id="b-fw">Upload and Install Firmware</button>
 <progress id="p-fw" value="0" max="100" hidden></progress><div class="msg" id="m-fw"></div></div>
-<div class="card"><h3>Web Filesystem Update</h3><p class="warn">Warning: installing the filesystem image replaces the SPIFFS contents, including custom profiles stored there.</p>
+<div class="card"><h3>Web Filesystem Update</h3><p class="warn">Filesystem updates are blocked while custom profiles or recovery files exist. Export and remove them before retrying; manually flashing a filesystem image replaces all SPIFFS contents.</p>
 <input type="file" id="f-fs" accept=".bin"><button id="b-fs">Upload and Install Web Files</button>
 <progress id="p-fs" value="0" max="100" hidden></progress><div class="msg" id="m-fs"></div></div>
 <p><a href="/">← Back to CarTouch</a></p>
@@ -850,6 +872,16 @@ void WebServerManager::_handleOtaUpload(AsyncWebServerRequest* request, const St
         _otaError = "";
         _otaBytes = 0;
         _otaIsFs  = request->hasParam("type") && request->getParam("type")->value() == "fs";
+
+        if (!ctPartitionFitsFlash(ESP.getFlashChipSize(), CT_REQUIRED_FLASH_BYTES)) {
+            _otaError = "Update blocked: detected flash is smaller than the configured partition layout.";
+            return;
+        }
+
+        if (_otaIsFs && !canReplaceFilesystemWithoutCustomProfiles()) {
+            _otaError = "Filesystem update blocked: SPIFFS could not be verified or custom profiles exist. Export and remove profiles before retrying.";
+            return;
+        }
 
         String lower = filename;
         lower.toLowerCase();

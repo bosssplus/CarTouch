@@ -143,6 +143,7 @@ private:
     bool _parseSignalLine(const char* line);
     bool _parseValueLine(const char* line);
     bool _parseCommentLine(const char* line);
+    void _clearMessages();
 };
 
 #endif    // VEHICLE_DB_H

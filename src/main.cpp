@@ -12,6 +12,7 @@
 #include <esp_task_wdt.h>
 
 #include "config.h"
+#include "ct_can_config.h"
 #include "can_manager.h"
 #include "can_service.h"
 #include "mcp2515_can_interface.h"
@@ -103,18 +104,30 @@ void setup() {
     Serial.println(" (+ Learn Mode / Custom Vehicle Database)");
     Serial.println("========================================\n");
 
-    // Heap-allocate the large/interdependent objects before anything else
-    // touches them.
-    vehicleDB             = new VehicleDB();
-    activeProfileManager  = new ActiveProfileManager(*vehicleDB, customVehicleStore);
-    vehicleControl         = new VehicleControl(canManager, *activeProfileManager);
-    if (!vehicleDB || !activeProfileManager || !vehicleControl) {
-        Serial.println("[INIT] FATAL: allocation failed for vehicleDB/activeProfileManager/vehicleControl");
-        Serial.println("[INIT] FATAL: PSRAM may be unavailable/disabled - halting.");
-        while (true) { delay(1000); }
+    const uint32_t flashBytes = ESP.getFlashChipSize();
+    const bool psramAvailable = ESP.getPsramSize() > 0;
+    const bool partitionLayoutFits = ctPartitionFitsFlash(flashBytes, CT_REQUIRED_FLASH_BYTES);
+    Serial.printf("[INIT] Flash: %u bytes | PSRAM: %u bytes | heap: %u bytes\n",
+                  (unsigned)flashBytes, (unsigned)ESP.getPsramSize(), (unsigned)ESP.getFreeHeap());
+    if (!partitionLayoutFits) {
+        Serial.printf("[INIT] Configured partition layout needs %u bytes of flash; filesystem will remain disabled.\n",
+                      (unsigned)CT_REQUIRED_FLASH_BYTES);
     }
-    Serial.printf("[INIT] Free PSRAM: %u bytes | Free heap: %u bytes\n",
-                  (unsigned)ESP.getFreePsram(), (unsigned)ESP.getFreeHeap());
+    if (!psramAvailable) {
+        Serial.println("[INIT] PSRAM unavailable; runtime memory is limited to internal SRAM.");
+    }
+
+    // Keep the large core objects resident in static storage so they remain
+    // usable even on ESP32-S3 boards without PSRAM. A small board should not
+    // hard-fail just because a 16MB+PSRAM layout is not available.
+    static VehicleDB vehicleDBStorage;
+    static ActiveProfileManager activeProfileManagerStorage(vehicleDBStorage, customVehicleStore);
+    static VehicleControl vehicleControlStorage(canManager, activeProfileManagerStorage);
+    vehicleDB = &vehicleDBStorage;
+    activeProfileManager = &activeProfileManagerStorage;
+    vehicleControl = &vehicleControlStorage;
+    Serial.printf("[INIT] Configured partition layout fits detected flash: %s\n",
+                  partitionLayoutFits ? "yes" : "no");
 
     // Watchdog - set up as early as possible so it covers the rest of
     // setup() too. Struct-based esp_task_wdt_config_t only exists on
@@ -153,7 +166,12 @@ void setup() {
 
     // 2. SPIFFS (web assets, DBC files, custom profiles)
     Serial.println("[INIT] Starting SPIFFS...");
-    if (!SPIFFS.begin(false)) {
+    if (!partitionLayoutFits) {
+        Serial.println("[INIT] SPIFFS disabled because its configured partition exceeds detected flash; data was not formatted");
+        getErrorLog()->log(LOG_CAT_SYSTEM, LOG_ERROR,
+                           "Configured SPIFFS partition does not fit detected flash; filesystem disabled without formatting");
+        moduleStatusManager.setState(MODULE_STORAGE, MODULE_ERROR);
+    } else if (!SPIFFS.begin(false)) {
         Serial.println("[INIT] SPIFFS mount failed - preserving data; filesystem features disabled");
         getErrorLog()->log(LOG_CAT_SYSTEM, LOG_ERROR,
                            "SPIFFS mount failed; filesystem features disabled without formatting");
@@ -219,6 +237,11 @@ void setup() {
     // otherwise the Learn tab's internal pointers stay null.
     tftUI.attachLearnModules(&learnEngine, &customVehicleStore,
                               activeProfileManager, vehicleControl);
+#ifdef CARTOUCH_HEADLESS
+    moduleStatusManager.setState(MODULE_DISPLAY, MODULE_DISABLED);
+    moduleStatusManager.setState(MODULE_TOUCH, MODULE_DISABLED);
+    Serial.println("[INIT] Headless build: display and touch are disabled");
+#else
     moduleStatusManager.setState(MODULE_DISPLAY, MODULE_INITIALIZING);
     tftUI.begin();
     moduleStatusManager.setState(MODULE_DISPLAY, MODULE_READY);
@@ -236,6 +259,7 @@ void setup() {
     } else {
         tftUI.showNotification("CarTouch ready");
     }
+#endif
 
     // 9. WiFi (AP mode by default)
     moduleStatusManager.setState(MODULE_WIFI, MODULE_INITIALIZING);

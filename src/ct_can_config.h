@@ -23,4 +23,8 @@ static inline bool ctMcp2515BitrateValid(uint32_t bitrate) {
     }
 }
 
+static inline bool ctPartitionFitsFlash(uint32_t flashBytes, uint32_t partitionEndBytes) {
+    return flashBytes != 0u && partitionEndBytes != 0u && flashBytes >= partitionEndBytes;
+}
+
 #endif

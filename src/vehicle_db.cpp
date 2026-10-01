@@ -169,19 +169,18 @@ void VehicleDB::begin() {
 // ■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■■
 
 bool VehicleDB::loadDBCFile(const char* filename) {
+    _clearMessages();
+
     // Profiles like "Generic / OBD-II" intentionally have an empty
     // dbcFileName - they don't need a DBC since OBD2Reader works with
     // standard PIDs directly.
     if (!filename || filename[0] == '\0') {
-        _messageCount = 0;
         Serial.println("[DB] This vehicle needs no DBC file (generic OBD-II mode)");
         return true;
     }
 
     // Any failure below must leave an EMPTY message table, never the previous
     // vehicle's messages (they would otherwise be sent for the new vehicle).
-    _messageCount = 0;
-
     if (!SPIFFS.exists(filename)) {
         Serial.printf("[DB] DBC file not found: %s\n", filename);
         return false;
@@ -240,6 +239,15 @@ bool VehicleDB::loadDBCFile(const char* filename) {
     Serial.printf("[DB] Load complete - %d messages\n", _messageCount);
 
     return _messageCount > 0;
+}
+
+void VehicleDB::_clearMessages() {
+    for (uint16_t i = 0; i < MAX_DBC_MESSAGES; ++i) {
+        DbcMessage& message = _messages[i];
+        std::vector<DbcSignal>().swap(message.signals);
+        message.signalCount = 0;
+    }
+    _messageCount = 0;
 }
 
 // ○○○○○○○○○○○○○○○○○○○○○○○○○○○○○○
